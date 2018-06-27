@@ -1,0 +1,219 @@
+﻿#!/usr/bin/python
+# -*- coding: UTF-8 -*-
+# encoding: utf-8
+
+'''
+Intended use:
+Feed in a .md or .tex document
+references in square [] or curly {} brackets will be searched for:
+PMID
+doi
+
+The default or specified .bib file will then be searched for the relevant citations. 
+Citations will be replaced with a citaion in either .md or .tex format.
+
+Any citations not present in the master .bib file will be downloaded from pubmed and added to the supplementary.bib file
+
+Two new files will be written:
+1. a new .md or .tex file with correct citations
+2. a local .bib file containing all cited reference details. 
+
+
+'''
+
+#-------------------
+import string,os,sys
+import io
+#import bibtexparser
+#from bibtexparser.bparser import BibTexParser
+#from bibtexparser.bwriter import BibTexWriter
+#from bibtexparser.bibdatabase import BibDatabase
+#-------------------
+cwd = os.getcwd()
+sys.path.append(cwd)
+import citefunctions
+config = citefunctions.getconfig()
+print config
+
+sys.exit()
+#-------------------
+default_bibfile = '~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.bib'
+default_updatebibfile = '~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib_update_auto.bib'
+testfile = 'test/eme1.md'
+#-------------------
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('-f', '--filepath',    help='filepath', default=testfile)
+parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
+parser.add_argument('-b', '--bibfile',    help='bibfile', default=default_bibfile)
+parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=default_updatebibfile)
+args = parser.parse_args()
+#-------------------
+# correct ~ for the right path to home dir on linux or mac
+home_dir_abspath = citefunctions.get_home_dir()
+args.filepath = args.filepath.replace("~",home_dir_abspath)
+args.bibfile = args.bibfile.replace("~",home_dir_abspath)
+args.updatebibfile = args.updatebibfile.replace("~",home_dir_abspath)
+#-------------------
+print args.filepath
+filetype = "unknown filetype"
+if args.filepath.endswith(".md"):
+    filetype="md"
+    if args.outputstyle=='null':
+        args.outputstyle = 'md'
+elif args.filepath.endswith(".tex"):
+    filetype="tex"
+    if args.outputstyle=='null':
+        args.outputstyle = 'tex'
+#-------------------
+outpath, filename = os.path.split(args.filepath)
+filestem = '.'.join(string.split(filename,'.')[:-1])
+bibout = os.path.join(outpath, filestem+".bib")
+#-------------------
+# read input file
+with io.open(args.filepath, "r", encoding="utf-8") as my_file:
+     text = my_file.read()
+text = citefunctions.make_unicode(text)
+#-------------------
+# read bibtex file
+with open(args.bibfile) as bibtex_file:
+    bibdat = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse_file(bibtex_file)
+#-------------------
+# make dictionaries
+pmids = {}
+ids = {}
+for entry in bibdat.entries:
+    ids[entry['ID']]=entry
+    try:
+        entry["pmid"]
+    except:
+        continue
+    try:
+        pmids[entry["pmid"]]
+        print ("duplicate PMID in biblatex database:", entry["pmid"])
+    except:
+        pass
+    pmids[entry["pmid"]] = entry
+#-------------------
+# find all citations
+idcitations = citefunctions.get_md_citations(text)
+idcitations += citefunctions.get_latex_citations(text)
+pmidcitations = citefunctions.get_pmid_citations(text)
+#-------------------
+# make new output database
+db = BibDatabase()
+update = BibDatabase()
+for thisid in idcitations:
+    try:
+        ids[thisid]
+    except:
+        bestmatchingkey = citefunctions.find_similar_keys(thisid, ids)
+        print ("bibtex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey))
+        continue
+    citefunctions.bibadd(db,ids[thisid])
+for this_pmid in pmidcitations:
+    try:
+        pmids[this_pmid]
+    except:
+        print ("PMID not found in biblatex file:", this_pmid)
+        # try to find it online and add it to update.bib
+        try:
+            new_article = get_article_from_pmid(this_pmid)
+            print "found online!"
+            # format for bibtex next
+            # format for bibtex next
+            # format for bibtex next
+            # format for bibtex next
+        except:
+            continue
+    citefunctions.bibadd(db,pmids[this_pmid])
+#-----------------
+# write output file
+if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
+    print "outputstyle = pmid"
+    outputfile = os.path.join(outpath, filestem+"_pmid."+filetype)
+    for entry in db.entries:
+        downloaded_id_list={'error':'no id to search for'}
+        if 'pmid' not in entry:
+            for idtype in ['doi', 'pmcid']:
+                if idtype in entry:
+                    downloaded_id_list = citefunctions.id_translator(entry[idtype])
+                    if 'pmid' in downloaded_id_list:
+                        entry['pmid'] = downloaded_id_list['pmid']
+                        break
+        if 'pmid' not in entry:
+            # if no success with doi or pmcid, search pubmed
+            searchstring = "{}".format(entry['title']).replace('{','').replace('}','')
+            found = citefunctions.search_pubmed(searchstring)
+            if len(found) == 1:
+                entry['pmid'] = found[0]
+        if 'pmid' in entry:
+            text = citefunctions.replace_id_with_pmid(text, entry['ID'], entry['pmid'])
+        else:
+            print "no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error'])
+elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
+    print "outputstyle = md"
+    outputfile = os.path.join(outpath, filestem+"."+filetype)
+    pass
+elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
+    print "outputstyle = tex"
+    outputfile = os.path.join(outpath, filestem+"."+filetype)
+    pass
+
+#-----------------
+# save remote bibliography
+with open(bibout, 'w') as bibtex_file:
+    bibtexparser.dump(db, bibtex_file)
+# save update bibliography
+with open(args.updatebibfile, 'w') as bibtex_file:
+    bibtexparser.dump(update, bibtex_file)
+#-----------------
+# save new text file
+with io.open(outputfile, 'w', encoding='utf-8') as file:
+    file.write(text)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -24,29 +24,22 @@ Two new files will be written:
 #-------------------
 import string,os,sys
 import io
-#import bibtexparser
-#from bibtexparser.bparser import BibTexParser
-#from bibtexparser.bwriter import BibTexWriter
-#from bibtexparser.bibdatabase import BibDatabase
+import bibtexparser
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.bwriter import BibTexWriter
+from bibtexparser.bibdatabase import BibDatabase
 #-------------------
 cwd = os.getcwd()
 sys.path.append(cwd)
 import citefunctions
 config = citefunctions.getconfig()
-print config
-
-sys.exit()
-#-------------------
-default_bibfile = '~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.bib'
-default_updatebibfile = '~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib_update_auto.bib'
-testfile = 'test/eme1.md'
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', '--filepath',    help='filepath', default=testfile)
+parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
 parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
-parser.add_argument('-b', '--bibfile',    help='bibfile', default=default_bibfile)
-parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=default_updatebibfile)
+parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
+parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
 args = parser.parse_args()
 #-------------------
 # correct ~ for the right path to home dir on linux or mac

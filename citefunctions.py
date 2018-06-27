@@ -15,7 +15,6 @@ def getconfig():
     with open('config.json') as json_data_file:
         data = json.load(json_data_file)
     return data
-
 #-------------
 config = getconfig()
 Entrez.email=config['email']
@@ -23,7 +22,7 @@ Entrez.email=config['email']
 
 def get_home_dir():
     if platform.system()=="Linux":
-        return config.['linux_home']
+        return config['linux_home']
     elif platform.system()=="Darwin":
         return config['mac_home']
     else: 

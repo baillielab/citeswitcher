@@ -56,7 +56,7 @@ def get_latex_citation_blocks(inputtext):
     return get_parethesised(inputtext, ['\\cite\{.+?\}'])
 
 def get_md_citation_blocks(inputtext):
-    return get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}'])
+    return get_parethesised(inputtext, ['\[.+?\]'])
 
 def get_pmid_citation_blocks(inputtext):
     return get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}'])
@@ -111,26 +111,50 @@ def bibadd(thisdb,thisentry):
     except:
         thisdb.entries.append(thisentry)
 
+def convert_separators_to_preferred(thisblock, possible_separators = [',',';',' ','\t'], preferred_separator = ', '):
+    for sep in possible_separators:
+        thisblock = thisblock.replace(sep, '--|holdingseparator|--')
+    blockitems = [x for x in thisblock.split('--|holdingseparator|--') if len(x)>0]
+    return preferred_separator.join(blockitems)
+
 def replace_id_with_pmid(thistext, thisid, thispmid):
     ''' 
-        return thistext after replacing all occurences of thisid with thispmid
+        return thistext after replacing all occurences of thisid (either a latex- or md-style reference) with thispmid
     '''
     #print 'replacing {} with {}'.format(thisid, thispmid)
-    pmidtext = u'PMID:{}'.format(thispmid)
-    latexblocks = get_latex_citation_blocks(thistext)
-    for block in latexblocks:
+    pmidstring = u'PMID:{}'.format(thispmid)
+    for block in get_latex_citation_blocks(thistext):
         newblock = block[block.find('{')+1:block.rfind('}')]
         newblock = '['+newblock+']'
-        newblock = newblock.replace(thisid, pmidtext)
+        newblock = convert_separators_to_preferred(newblock)
+        newblock = newblock.replace(thisid, pmidstring)
         thistext = thistext.replace('\\'+block, newblock)
         thistext = thistext.replace(block, newblock)
     for block in get_md_citation_blocks(thistext):
         newblock = '['+block[1:-1]+']'
-        newblock = newblock.replace(u'@'+thisid, pmidtext)
-        newblock = newblock.replace(thisid, pmidtext)
+        newblock = convert_separators_to_preferred(newblock)
+        newblock = newblock.replace(u'@'+thisid, pmidstring)
+        newblock = newblock.replace(thisid, pmidstring)
         thistext = thistext.replace(block, newblock)
     return thistext
 
+def replace_pmid_with_id(thistext, thisid, thispmid, style='tex'):
+    pmidstring = u'PMID:{}'.format(thispmid)
+    for block in get_pmid_citation_blocks(thistext):
+        if block.startswith('{') and block.endswith('}'):
+            block = '['+block[1:-1]+']'
+        newblock = block[block.find('[')+1:block.rfind(']')]
+        newblock = convert_separators_to_preferred(newblock)
+        if style == 'tex':
+            newblock = newblock.replace(pmidstring, thisid)
+            newblock = '\\cite{' + newblock + '}'
+        elif style == 'md':
+            if not thisid.startswith('@'):
+                thisid = '@'+thisid
+            newblock = newblock.replace(pmidstring, thisid)
+            newblock = '[' + newblock + ']'
+        thistext = thistext.replace(block, newblock)
+    return thistext
 
 def find_similar_keys(this_string, thisdict):
     '''

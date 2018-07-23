@@ -3,6 +3,9 @@
 # encoding: utf-8
 
 '''
+
+python fix_citations.py -f test/eme1.md -o pmid
+
 Intended use:
 Feed in a .md or .tex document
 references in square [] or curly {} brackets will be searched for:
@@ -10,7 +13,7 @@ PMID
 doi
 
 The default or specified .bib file will then be searched for the relevant citations. 
-Citations will be replaced with a citaion in either .md or .tex format.
+Citations will be replaced with a citaion in either .md or .tex or PMID format.
 
 Any citations not present in the master .bib file will be downloaded from pubmed and added to the supplementary.bib file
 
@@ -67,16 +70,25 @@ bibout = os.path.join(outpath, filestem+".bib")
 with io.open(args.filepath, "r", encoding="utf-8") as my_file:
      text = my_file.read()
 text = citefunctions.make_unicode(text)
+print ("read input file")
 #-------------------
 # read bibtex file
 with open(args.bibfile) as bibtex_file:
     bibdat = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse_file(bibtex_file)
+print ("read bib file")
 #-------------------
 # make dictionaries
 pmids = {}
 ids = {}
 for entry in bibdat.entries:
-    ids[entry['ID']]=entry
+    try:
+        ids[entry['ID']]
+        print ("duplicate ID in biblatex database:", entry["ID"])
+        if 'pmid' in entry:
+            # replace this entry with a new one that has a PMID
+            ids[entry['ID']]=entry
+    except:
+        ids[entry['ID']]=entry
     try:
         entry["pmid"]
     except:
@@ -92,11 +104,14 @@ for entry in bibdat.entries:
 idcitations = citefunctions.get_md_citations(text)
 idcitations += citefunctions.get_latex_citations(text)
 pmidcitations = citefunctions.get_pmid_citations(text)
+print idcitations
+print pmidcitations
 #-------------------
 # make new output database
 db = BibDatabase()
 update = BibDatabase()
 for thisid in idcitations:
+    print thisid
     try:
         ids[thisid]
     except:

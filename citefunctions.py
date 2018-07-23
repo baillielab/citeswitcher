@@ -86,16 +86,23 @@ def get_md_citations(inputtext):
 
 def get_pmid_citations(inputtext):
     pth = get_pmid_citation_blocks(inputtext)
+    pth = split_by_delimiter(pth)
     for p in ["PMID: ","PMID :", "pmid:", "pmid :", "pmid: "]:
         pth = [e.replace(p, "PMID:") for e in pth]
-    pmidstyle = [x.replace('PMID:','') for x in pth if x.startswith('PMID:')]
+    pmidstyle = []
     for x in pth:
-        if len(x)>4 and len(x)<10:
-            try:
-                int(x)
-            except:
-                continue
-            pmidstyle += x
+        if x.startswith('PMID:'):
+            # then assume this is a correctly formatted PMID
+            pmidstyle.append(x.replace('PMID:',''))
+        else:
+            # rescue some integers if they look like PMIDs
+            print x
+            if len(x)>4 and len(x)<10:
+                try:
+                    int(x)
+                except:
+                    continue
+                pmidstyle.append(x)
     return pmidstyle
 
 def bibadd(thisdb,thisentry):
@@ -146,7 +153,7 @@ def id_translator(thisid):
     search pubmed API; return dict of {'pmid':PMID, 'pmcid':PMCID, 'doi':DOI, 'error':'errormessage'} where available
     '''
     # PMCID must start with PMC
-    searchstring = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool={}&email={}&ids={}&format=json".format(toolname, Entrez.email, thisid)
+    searchstring = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool={}&email={}&ids={}&format=json".format(config['toolname'], Entrez.email, thisid)
     r = requests.get(searchstring)
     r = json.loads(r.text)
     dopubmed = False

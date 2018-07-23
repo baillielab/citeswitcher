@@ -1,10 +1,27 @@
 ---
-title: this title
+title: Citeswitcher
 author: Kenneth Baillie
 date: \today
 ...
  
 
-[comment]: <> (This is a comment, it will not be included)
+# Citeswitcher
 
-![Change in arterial oxygen saturation ($S_aO_2$) over a range of performance measures (membrane diffusivity) for VIVOx devices in different locations](http://baillielab.net/sourcefiles/vivox/r6.Hb_90.RR_4.fio2_0.21_vivoxDm174_vivoxsites3_vivoxDm_SaO2.png "Dm vs SaO2")
+Intended use:
+- Feed in a .md or .tex document
+- references in square [] or curly {} brackets will be searched for:
+-- PMID
+-- doi
+
+The default or specified .bib file will then be searched for the relevant citations. 
+Citations will be replaced with a citaion in either .md or .tex format.
+
+Any citations not present in the master .bib file will be downloaded from pubmed and added to the supplementary.bib file
+
+Two new files will be written:
+1. a new .md or .tex file with correct citations
+2. a local .bib file containing all cited reference details. 
+
+# Examples
+
+python fix_citations.py -f test/eme.md

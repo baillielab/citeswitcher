@@ -66,6 +66,16 @@ outpath, filename = os.path.split(args.filepath)
 filestem = '.'.join(string.split(filename,'.')[:-1])
 bibout = os.path.join(outpath, filestem+".bib")
 #-------------------
+# name output file
+if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
+    print "outputstyle = pmid"
+    outputfile = os.path.join(outpath, filestem+"_auto_pmid."+filetype)
+elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
+    print "outputstyle = md"
+    outputfile = os.path.join(outpath, filestem+"_auto_md."+filetype)
+elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
+    print "outputstyle = tex"
+    outputfile = os.path.join(outpath, filestem+"_auto_tex."+filetype)
 # read input file
 with io.open(args.filepath, "r", encoding="utf-8") as my_file:
      text = my_file.read()
@@ -162,17 +172,6 @@ for entry in db.entries:
     else:
         print "no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error'])
 
-#-----------------
-# name output file
-if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
-    print "outputstyle = pmid"
-    outputfile = os.path.join(outpath, filestem+"_pmid."+filetype)
-elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
-    print "outputstyle = md"
-    outputfile = os.path.join(outpath, filestem+"."+filetype)
-elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
-    print "outputstyle = tex"
-    outputfile = os.path.join(outpath, filestem+"."+filetype)
 #-----------------
 # save remote bibliography
 with open(bibout, 'w') as bibtex_file:

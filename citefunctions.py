@@ -59,7 +59,11 @@ def get_md_citation_blocks(inputtext):
     return get_parethesised(inputtext, ['\[.+?\]'])
 
 def get_pmid_citation_blocks(inputtext):
-    return get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}'])
+    confirmed_blocks = []
+    for b in get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}']):
+        if "PMID" in b or "pmid" in b:
+            confirmed_blocks.append(b)
+    return confirmed_blocks
 
 def split_by_delimiter(thislist, delimiters=[";",",","[","]"]):
     '''

@@ -20,7 +20,8 @@ import calendar
 
 #-------------
 def getconfig():
-    with open('config.json') as json_data_file:
+    cfgfile = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
     return data
 #-------------
@@ -44,15 +45,17 @@ def check_dir(this_dir):
         os.mkdir(this_dir)
     fix_permissions(this_dir)
 
-def callpandoc(f, out_ext, out_dir=''):
-    cmd = 'pandoc --filter pandoc-citeproc {} -o {}'.format(f, os.path.join(out_dir, newext(f, out_ext)))
-    subprocess.call(cmd, shell=True)
-
 def getext(filepath):
     return os.path.split(filepath)[-1].split('.')[-1]
 
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
+
+def callpandoc(f, out_ext, out_dir='', args="--toc "):
+    cmd = 'pandoc {} --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
+    print (cmd)
+    subprocess.call(cmd, shell=True)
+
 #-------------
 def readheader(filecontents):
     '''
@@ -85,9 +88,6 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
     return '---\n{}\n...\n{}'.format('\n'.join(header), remainder)
-
-
-
 
 #-------------
 
@@ -149,6 +149,8 @@ def get_latex_citations(inputtext):
 def get_md_citations(inputtext):
     pth = get_md_citation_blocks(inputtext)
     pth = split_by_delimiter(pth)
+    for crossreftag in ['@fig:', '@sec:', '@tbl:', '@eq:']:
+        pth = [x for x in pth if not x.startswith(crossreftag)]
     pth = [x.replace('@','') for x in pth if x.startswith('@')]
     return list(set(pth))
 

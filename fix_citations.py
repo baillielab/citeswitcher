@@ -192,7 +192,8 @@ with open(args.updatebibfile, 'w') as biblatex_file:
     bibtexparser.dump(update, biblatex_file)
 #-----------------
 # save new text file
-text = citefunctions.addheader(text, os.path.abspath(bibout), os.path.abspath(args.cslfile))
+cslpath = os.path.join(os.path.dirname(__file__), args.cslfile)
+text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text)
 #-----------------
@@ -202,11 +203,13 @@ if args.pandoc:
     # make symlink to image dir (saves the hassle of converting all refs)
     home_img = os.path.abspath(os.path.join(os.path.split(args.filepath)[0], args.imagedir))
     subdir_img = os.path.abspath(os.path.join(outpath,args.imagedir))
-    cmd = "ln -s {} {}".format(home_img, subdir_img)
-    print (cmd)
-    subprocess.call(cmd, shell=True)
+    if not os.path.exists(subdir_img):
+        cmd = "ln -s {} {}".format(home_img, subdir_img)
+        print (cmd)
+        subprocess.call(cmd, shell=True)
     # run pandoc
-    cmd = "python run_pandoc.py -f {}".format(outputfile)
+    pandocscript = os.path.join(os.path.dirname(__file__), 'run_pandoc.py')
+    cmd = "python {} -f {}".format(pandocscript, outputfile)
     subprocess.call(cmd, shell=True)
 
 

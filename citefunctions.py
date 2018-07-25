@@ -8,6 +8,8 @@ import re
 import string
 import json
 import sys
+import os
+import subprocess
 import requests
 import difflib
 from Bio import Entrez
@@ -15,10 +17,6 @@ from Bio import Medline
 import json
 import xml.etree.ElementTree as ET
 import calendar
-
-
-
-
 
 #-------------
 def getconfig():
@@ -29,16 +27,69 @@ def getconfig():
 config = getconfig()
 Entrez.email=config['email']
 #-------------
-
 def get_home_dir():
     if platform.system()=="Linux":
         return config['linux_home']
     elif platform.system()=="Darwin":
         return config['mac_home']
     else: 
-        print("unrecognised operating system:")
-        print(platform.system())
+        print("*** unrecognised operating system (citefunctions.get_home_dir()): {} ***".format(platform.system()))
         sys.exit()
+
+def fix_permissions(this_path):
+    os.system("/bin/chmod 755 %s"%(this_path))
+    
+def check_dir(this_dir):
+    if not os.path.isdir(this_dir):
+        os.mkdir(this_dir)
+    fix_permissions(this_dir)
+
+def callpandoc(f, out_ext, out_dir=''):
+    cmd = 'pandoc --filter pandoc-citeproc {} -o {}'.format(f, os.path.join(out_dir, newext(f, out_ext)))
+    subprocess.call(cmd, shell=True)
+
+def getext(filepath):
+    return os.path.split(filepath)[-1].split('.')[-1]
+
+def newext(filepath, thisext):
+    return filepath[:filepath.rfind('.')] + thisext
+#-------------
+def readheader(filecontents):
+    '''
+        Read a valid markdown header
+    '''
+    t = filecontents.strip()
+    t = t.replace('\r','\n')
+    lines = t.split('\n')
+    lines = [x.strip() for x in lines]
+    header = []
+    remainder = filecontents
+    if lines[0]=='---' and '...' in lines:
+        header = lines[1:lines.index('...')]
+        remainder = '\n'.join(lines[lines.index('...')+1:])
+    return header, remainder
+
+def addheader(filecontents, bibtexfile, cslfilepath='null'):
+    '''
+        Add components to markdown header. If no header exists, add one.
+    '''
+    filecontents = filecontents.strip()
+    header, remainder = readheader(filecontents)
+    headerkeys = [x.split(':')[0] for x in header]
+    if 'title' not in headerkeys:
+        header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
+    if 'date' not in headerkeys:
+        header.append('date: \\today')
+    if 'bibliography' not in headerkeys:
+        header.append('bibliography: {}'.format(bibtexfile))
+    if 'csl' not in headerkeys and cslfilepath != 'null':
+        header.append('csl: {}'.format(cslfilepath))
+    return '---\n{}\n...\n{}'.format('\n'.join(header), remainder)
+
+
+
+
+#-------------
 
 def flatten(thislist):
     listcount = [1 for x in thislist if type(x)==type([])]

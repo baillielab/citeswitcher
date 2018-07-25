@@ -27,8 +27,9 @@ Two new files will be written:
 python fix_citations.py -f test/eme.md
 
 # Requirements
-Python 2.7 
+Python 3.7 
 bibtexparser
+requests
 
 pandoc
 pandoc-citeproc

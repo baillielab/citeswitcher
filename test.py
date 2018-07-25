@@ -51,10 +51,25 @@ def test_p2b(thispmid):
     #new_article = citefunctions.get_article_from_pmid(thispmid)
     print(citefunctions.p2b(thispmid))
 
+def test_readhead(thisfile):
+    f=open(thisfile)
+    text = f.read()
+    f.close()
+    print (citefunctions.readheader(text))
 
-test_p2b('29494619')
-test_p2b(29494619)
-test_p2b('xxxx')
+def test_addhead(thisfile):
+    f=open(thisfile)
+    text = f.read()
+    f.close()
+    newfile =  (citefunctions.addheader(text, 'test/eme.bib', 'sup-files/csl/nature.csl'))
+    print ("new:")
+    print (newfile)
+
+test_addhead('test/eme.txt')
+#test_readhead('test/eme.txt')
+#test_p2b('29494619')
+#test_p2b(29494619)
+#test_p2b('xxxx')
 #test_translator()
 #test_replacement(text3)
 #test_mdcite()

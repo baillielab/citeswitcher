@@ -5,23 +5,6 @@
 '''
 
 python fix_citations.py -f test/eme1.md -o pmid
-
-Intended use:
-Feed in a .md or .tex document
-references in square [] or curly {} brackets will be searched for:
-PMID
-doi
-
-The default or specified .bib file will then be searched for the relevant citations. 
-Citations will be replaced with a citaion in either .md or .tex or PMID format.
-
-Any citations not present in the master .bib file will be downloaded from pubmed and added to the supplementary.bib file
-
-Two new files will be written:
-1. a new .md or .tex file with correct citations
-2. a local .bib file containing all cited reference details. 
-
-
 '''
 
 #-------------------
@@ -41,55 +24,9 @@ config = citefunctions.getconfig()
 import argparse
 parser = argparse.ArgumentParser()
 # - essential
-parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
-parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
-# - optional
-parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
-parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
-parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
+parser.add_argument('-f', '--filepath',    help='filepath', default=config['default_bibfile'])
 parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
-parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
 args = parser.parse_args()
-#-------------------
-# correct ~ for the right path to home dir on linux or mac
-home_dir_abspath = citefunctions.get_home_dir()
-args.filepath = args.filepath.replace("~",home_dir_abspath)
-args.bibfile = args.bibfile.replace("~",home_dir_abspath)
-args.updatebibfile = args.updatebibfile.replace("~",home_dir_abspath)
-#-------------------
-print(args.filepath)
-filetype = "unknown filetype"
-if args.filepath.endswith(".md") or args.filepath.endswith(".txt"):
-    filetype="md"
-    if args.outputstyle=='null':
-        args.outputstyle = 'md'
-elif args.filepath.endswith(".tex"):
-    filetype="tex"
-    if args.outputstyle=='null':
-        args.outputstyle = 'tex'
-#-------------------
-outpath, filename = os.path.split(args.filepath)
-outpath = os.path.join(outpath, args.outputsubdir)
-citefunctions.check_dir(outpath)
-filestem = '.'.join(filename.split('.')[:-1])
-bibout = os.path.join(outpath, filestem+".bib")
-#-------------------
-# name output file
-if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
-    print("outputstyle = pmid")
-    outputfile = os.path.join(outpath, filestem+".citepmid."+filetype)
-elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
-    print("outputstyle = md")
-    outputfile = os.path.join(outpath, filestem+".citemd."+filetype)
-elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
-    print("outputstyle = tex")
-    outputfile = os.path.join(outpath, filestem+".citetex."+filetype)
-#-------------------
-# read input file
-with io.open(args.filepath, "r", encoding="utf-8") as my_file:
-     text = my_file.read()
-text = citefunctions.make_unicode(text)
-print ("read input file")
 #-------------------
 # read bibtex file
 with open(args.bibfile) as bibtex_file:
@@ -100,23 +37,21 @@ print ("read bib file")
 pmids = {}
 ids = {}
 for entry in bibdat.entries:
-    # biblatex id dict
     try:
         ids[entry['ID']]
-        print("duplicate ID in biblatex database:{}".format(entry["ID"]))
+        print(("duplicate ID in biblatex database:", entry["ID"]))
         if 'pmid' in entry:
             # replace this entry with a new one that has a PMID
             ids[entry['ID']]=entry
     except:
         ids[entry['ID']]=entry
-    # pmid id dict
     try:
         entry["pmid"]
     except:
         continue
     try:
         pmids[entry["pmid"]]
-        print("duplicate PMID in biblatex database:{}".format(entry["pmid"]))
+        print(("duplicate PMID in biblatex database:", entry["pmid"]))
     except:
         pass
     pmids[entry["pmid"]] = entry
@@ -136,7 +71,7 @@ for thisid in idcitations:
         ids[thisid]
     except:
         bestmatchingkey = citefunctions.find_similar_keys(thisid, ids)
-        print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
+        print(("bibtex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
         continue
     citefunctions.bibadd(db,ids[thisid])
 # search through all the cited papers in this file and add them to the db 
@@ -148,9 +83,8 @@ for thispmid in pmidcitations:
         b = citefunctions.p2b(thispmid)
         if b != 'null' and b != None:
             pmids[thispmid] = b
-            print ("PMID:{} found online".format(thispmid))
-
             citefunctions.bibadd(update,pmids[thispmid])
+            print ("PMID:{} found online".format(thispmid))
         else:
             print ("PMID:{} NOT FOUND ON PUBMED".format(thispmid))
             continue
@@ -184,14 +118,14 @@ for entry in db.entries:
 
 #-----------------
 # save remote bibliography
-with open(bibout, 'w') as biblatex_file:
-    bibtexparser.dump(db, biblatex_file)
+with open(bibout, 'w') as bibtex_file:
+    bibtexparser.dump(db, bibtex_file)
 # save update bibliography
-with open(args.updatebibfile, 'w') as biblatex_file:
-    bibtexparser.dump(update, biblatex_file)
+with open(args.updatebibfile, 'w') as bibtex_file:
+    bibtexparser.dump(update, bibtex_file)
 #-----------------
 # save new text file
-text = citefunctions.addheader(text, os.path.abspath(bibout), os.path.abspath(args.cslfile))
+text = citefunctions.addheader(text, bibtex_file, args.cslfile)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text)
 #-----------------

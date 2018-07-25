@@ -49,6 +49,7 @@ parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
 parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
 parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
+parser.add_argument('-i', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
 args = parser.parse_args()
 #-------------------
 # correct ~ for the right path to home dir on linux or mac
@@ -195,8 +196,16 @@ text = citefunctions.addheader(text, os.path.abspath(bibout), os.path.abspath(ar
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text)
 #-----------------
-# run pandoc
+
+#-----------------
 if args.pandoc:
+    # make symlink to image dir (saves the hassle of converting all refs)
+    home_img = os.path.abspath(os.path.join(os.path.split(args.filepath)[0], args.imagedir))
+    subdir_img = os.path.abspath(os.path.join(outpath,args.imagedir))
+    cmd = "ln -s {} {}".format(home_img, subdir_img)
+    print (cmd)
+    subprocess.call(cmd, shell=True)
+    # run pandoc
     cmd = "python run_pandoc.py -f {}".format(outputfile)
     subprocess.call(cmd, shell=True)
 

@@ -14,4 +14,5 @@ workingdir, filename = os.path.split(os.path.abspath(args.filepath))
 os.chdir(workingdir)
 citefunctions.callpandoc(filename, '.docx')
 citefunctions.callpandoc(filename, '.pdf')
+citefunctions.callpandoc(filename, '.tex')
 

@@ -28,6 +28,7 @@ Two new files will be written:
 import string,os,sys
 import io
 import bibtexparser
+import subprocess
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
@@ -39,8 +40,11 @@ config = citefunctions.getconfig()
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
+# - essential
 parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
 parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
+# - optional
+parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
 parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
 args = parser.parse_args()
@@ -51,9 +55,9 @@ args.filepath = args.filepath.replace("~",home_dir_abspath)
 args.bibfile = args.bibfile.replace("~",home_dir_abspath)
 args.updatebibfile = args.updatebibfile.replace("~",home_dir_abspath)
 #-------------------
-print args.filepath
+print(args.filepath)
 filetype = "unknown filetype"
-if args.filepath.endswith(".md"):
+if args.filepath.endswith(".md") or args.filepath.endswith(".txt"):
     filetype="md"
     if args.outputstyle=='null':
         args.outputstyle = 'md'
@@ -63,19 +67,19 @@ elif args.filepath.endswith(".tex"):
         args.outputstyle = 'tex'
 #-------------------
 outpath, filename = os.path.split(args.filepath)
-filestem = '.'.join(string.split(filename,'.')[:-1])
+filestem = '.'.join(filename.split('.')[:-1])
 bibout = os.path.join(outpath, filestem+".bib")
 #-------------------
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
-    print "outputstyle = pmid"
-    outputfile = os.path.join(outpath, filestem+"_auto_pmid."+filetype)
+    print("outputstyle = pmid")
+    outputfile = os.path.join(outpath, filestem+".citepmid."+filetype)
 elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
-    print "outputstyle = md"
-    outputfile = os.path.join(outpath, filestem+"_auto_md."+filetype)
+    print("outputstyle = md")
+    outputfile = os.path.join(outpath, filestem+".citemd."+filetype)
 elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
-    print "outputstyle = tex"
-    outputfile = os.path.join(outpath, filestem+"_auto_tex."+filetype)
+    print("outputstyle = tex")
+    outputfile = os.path.join(outpath, filestem+".citetex."+filetype)
 # read input file
 with io.open(args.filepath, "r", encoding="utf-8") as my_file:
      text = my_file.read()
@@ -93,7 +97,7 @@ ids = {}
 for entry in bibdat.entries:
     try:
         ids[entry['ID']]
-        print ("duplicate ID in biblatex database:", entry["ID"])
+        print(("duplicate ID in biblatex database:", entry["ID"]))
         if 'pmid' in entry:
             # replace this entry with a new one that has a PMID
             ids[entry['ID']]=entry
@@ -105,7 +109,7 @@ for entry in bibdat.entries:
         continue
     try:
         pmids[entry["pmid"]]
-        print ("duplicate PMID in biblatex database:", entry["pmid"])
+        print(("duplicate PMID in biblatex database:", entry["pmid"]))
     except:
         pass
     pmids[entry["pmid"]] = entry
@@ -114,37 +118,35 @@ for entry in bibdat.entries:
 idcitations = citefunctions.get_md_citations(text)
 idcitations += citefunctions.get_latex_citations(text)
 pmidcitations = citefunctions.get_pmid_citations(text)
-print idcitations
-print pmidcitations
+print(idcitations)
+print(pmidcitations)
 #-------------------
 # make new output database
 db = BibDatabase()
-update = BibDatabase()
 for thisid in idcitations:
-    print thisid
+    print(thisid)
     try:
         ids[thisid]
     except:
         bestmatchingkey = citefunctions.find_similar_keys(thisid, ids)
-        print ("bibtex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey))
+        print(("bibtex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
         continue
     citefunctions.bibadd(db,ids[thisid])
-for this_pmid in pmidcitations:
+# search through all the cited papers in this file and add them to the db 
+update = BibDatabase()
+for thispmid in pmidcitations:
     try:
-        pmids[this_pmid]
+        pmids[thispmid]
     except:
-        print ("PMID not found in biblatex file:", this_pmid)
-        # try to find it online and add it to update.bib
-        try:
-            new_article = get_article_from_pmid(this_pmid)
-            print "found online!"
-            # format for bibtex next
-            # format for bibtex next
-            # format for bibtex next
-            # format for bibtex next
-        except:
+        b = citefunctions.p2b(thispmid)
+        if b != 'null' and b != None:
+            pmids[thispmid] = b
+            citefunctions.bibadd(update,pmids[thispmid])
+            print ("PMID:{} found online".format(thispmid))
+        else:
+            print ("PMID:{} NOT FOUND ON PUBMED".format(thispmid))
             continue
-    citefunctions.bibadd(db,pmids[this_pmid])
+    citefunctions.bibadd(db,pmids[thispmid])
 #-----------------
 # update database with all the PMIDs we can find
 for entry in db.entries:
@@ -170,7 +172,7 @@ for entry in db.entries:
         elif args.outputstyle == 'latex' or args.outputstyle == 'tex':  
             text = citefunctions.replace_pmid_with_id(text, thisid = entry['ID'], thispmid = entry['pmid'], style='tex')
     else:
-        print "no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error'])
+        print("no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error']))
 
 #-----------------
 # save remote bibliography
@@ -183,28 +185,11 @@ with open(args.updatebibfile, 'w') as bibtex_file:
 # save new text file
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#-----------------
+# run pandoc
+if args.pandoc:
+    cmd = "python run_pandoc.py -f {}".format(outputfile)
+    subprocess.call(cmd, shell=True)
 
 
 

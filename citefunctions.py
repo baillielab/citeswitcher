@@ -3,12 +3,22 @@
 # encoding: utf-8
 
 
-import platform, re, string, json, sys
+import platform
+import re
+import string
+import json
+import sys
 import requests
 import difflib
 from Bio import Entrez
 from Bio import Medline
 import json
+import xml.etree.ElementTree as ET
+import calendar
+
+
+
+
 
 #-------------
 def getconfig():
@@ -26,8 +36,8 @@ def get_home_dir():
     elif platform.system()=="Darwin":
         return config['mac_home']
     else: 
-        print "unrecognised operating system:"
-        print platform.system()
+        print("unrecognised operating system:")
+        print(platform.system())
         sys.exit()
 
 def flatten(thislist):
@@ -38,7 +48,7 @@ def flatten(thislist):
         return [item for sublist in thislist for item in sublist] #flatten list
 
 def make_unicode(input):
-    if type(input) != unicode:
+    if type(input) != str:
         input =  input.decode('utf-8')
         return input
     else:
@@ -49,7 +59,10 @@ def get_parethesised(thistext,parentheses=['\[.+?\]', '\{.+?\}']):
         print ("Error, parentheses must be in a list")
     outlist = []
     for p in parentheses:
-        outlist += re.findall(p,thistext)
+        try:
+            outlist += re.findall(p,thistext)
+        except:
+            continue
     return outlist
 
 def get_latex_citation_blocks(inputtext):
@@ -71,9 +84,9 @@ def split_by_delimiter(thislist, delimiters=[";",",","[","]"]):
         return flattened list of non-empty, stripped strings, split by delimiters
     '''
     for d in delimiters:
-        thislist = [string.split(e,d) for e in thislist]
+        thislist = [e.split(d) for e in thislist]
         thislist = flatten(thislist)
-    thislist = [string.strip(e) for e in thislist if e!=""]
+    thislist = [e.strip() for e in thislist if e!=""]
     return thislist
 
 def get_latex_citations(inputtext):
@@ -85,7 +98,7 @@ def get_latex_citations(inputtext):
 def get_md_citations(inputtext):
     pth = get_md_citation_blocks(inputtext)
     pth = split_by_delimiter(pth)
-    pth = [x.replace('@','') for x in pth if x.startswith(u'@')]
+    pth = [x.replace('@','') for x in pth if x.startswith('@')]
     return list(set(pth))
 
 def get_pmid_citations(inputtext):
@@ -100,7 +113,7 @@ def get_pmid_citations(inputtext):
             pmidstyle.append(x.replace('PMID:',''))
         else:
             # rescue some integers if they look like PMIDs
-            print x
+            print(x)
             if len(x)>4 and len(x)<10:
                 try:
                     int(x)
@@ -110,10 +123,15 @@ def get_pmid_citations(inputtext):
     return pmidstyle
 
 def bibadd(thisdb,thisentry):
-    try:
-        thisdb[thisentry]
-    except:
-        thisdb.entries.append(thisentry)
+    if thisentry is not None:
+        try:
+            thisentry['ENTRYTYPE']
+        except:
+            thisentry['ENTRYTYPE'] = 'article'
+        try:
+            thisdb[thisentry]
+        except:
+            thisdb.entries.append(thisentry)
 
 def convert_separators_to_preferred(thisblock, possible_separators = [',',';',' ','\t'], preferred_separator = ', '):
     for sep in possible_separators:
@@ -126,7 +144,7 @@ def replace_id_with_pmid(thistext, thisid, thispmid):
         return thistext after replacing all occurences of thisid (either a latex- or md-style reference) with thispmid
     '''
     #print 'replacing {} with {}'.format(thisid, thispmid)
-    pmidstring = u'PMID:{}'.format(thispmid)
+    pmidstring = 'PMID:{}'.format(thispmid)
     for block in get_latex_citation_blocks(thistext):
         newblock = block[block.find('{')+1:block.rfind('}')]
         newblock = '['+newblock+']'
@@ -137,24 +155,25 @@ def replace_id_with_pmid(thistext, thisid, thispmid):
     for block in get_md_citation_blocks(thistext):
         newblock = '['+block[1:-1]+']'
         newblock = convert_separators_to_preferred(newblock)
-        newblock = newblock.replace(u'@'+thisid, pmidstring)
+        newblock = newblock.replace('@'+thisid, pmidstring)
         newblock = newblock.replace(thisid, pmidstring)
         thistext = thistext.replace(block, newblock)
     return thistext
 
 def replace_pmid_with_id(thistext, thisid, thispmid, style='tex'):
-    pmidstring = u'PMID:{}'.format(thispmid)
+    pmidstring = 'PMID:{}'.format(thispmid)
     for block in get_pmid_citation_blocks(thistext):
         if block.startswith('{') and block.endswith('}'):
             block = '['+block[1:-1]+']'
         newblock = block[block.find('[')+1:block.rfind(']')]
-        newblock = convert_separators_to_preferred(newblock)
         if style == 'tex':
+            newblock = convert_separators_to_preferred(newblock, preferred_separator=', ')
             newblock = newblock.replace(pmidstring, thisid)
             newblock = '\\cite{' + newblock + '}'
         elif style == 'md':
             if not thisid.startswith('@'):
                 thisid = '@'+thisid
+            newblock = convert_separators_to_preferred(newblock, preferred_separator='; ')
             newblock = newblock.replace(pmidstring, thisid)
             newblock = '[' + newblock + ']'
         thistext = thistext.replace(block, newblock)
@@ -225,9 +244,9 @@ def get_links_from_pmid(pmid):
     return Entrez.elink(dbfrom="pubmed",id=pmid,cmd="prlinks")
 
 def get_article_from_pmid(pmid):
-    output = Entrez.efetch(db="pubmed", id=pmid, rettype="medline",retmode="text")
+    output = Entrez.efetch(db="pubmed", id=pmid, rettype="medline", retmode="text")
     details = Medline.parse(output)
-    thisarticle = details.next()
+    thisarticle = next(details)
     return thisarticle
 
 def get_doi_from_pmid(pmid):
@@ -239,43 +258,105 @@ def get_doi_from_pmid(pmid):
         raise ValueError('This pmid ({}) was not found.'.format(pmid))
 
 
+# --------------------
+# by Nick Loman
 
+def p2b(thispmid):
+    ''' by Nick Loman '''
 
+    ## Fetch XML data from Entrez.
+    efetch = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
+    pmids = [str(thispmid)]
+    url = '{}?db=pubmed&id={}&rettype=abstract'.format(efetch, ','.join(pmids))
+    r = requests.get(url)
+    ##print(r.text) # to examine the returned xml
 
+    ## Loop over the PubMed IDs and parse the XML using https://docs.python.org/2/library/xml.etree.elementtree.html
+    root = ET.fromstring(r.text)
+    for PubmedArticle in root.iter('PubmedArticle'):
+        PMID = PubmedArticle.find('./MedlineCitation/PMID')
+        ISSN = PubmedArticle.find('./MedlineCitation/Article/Journal/ISSN')
+        Volume = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/Volume')
+        Issue = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/Issue')
+        Year = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/Year')
+        Month = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/Month')
+        Title = PubmedArticle.find('./MedlineCitation/Article/Journal/Title')
+        ArticleTitle = PubmedArticle.find('./MedlineCitation/Article/ArticleTitle')
+        MedlinePgn = PubmedArticle.find('./MedlineCitation/Article/Pagination/MedlinePgn')
+        Abstract = PubmedArticle.find('./MedlineCitation/Article/Abstract/AbstractText')
+        # jkb additions
+        PMCID = None
+        DOI = None
+        ids = PubmedArticle.findall('./PubmedData/ArticleIdList/ArticleId')
+        for thisid in ids:
+            if thisid.attrib['IdType'] == 'pmc':
+                PMCID = thisid
+            elif thisid.attrib['IdType'] == 'doi':
+                DOI = thisid
+        # format author list
+        authors = []
+        for Author in PubmedArticle.iter('Author'):
+            try:
+                LastName = Author.find('LastName').text
+                ForeName = Author.find('ForeName').text
+            except AttributeError:  # e.g. CollectiveName
+                continue
+            authors.append('{}, {}'.format(LastName, ForeName))
+        ## Use InvestigatorList instead of AuthorList
+        if len(authors) == 0:
+            ## './MedlineCitation/Article/Journal/InvestigatorList'
+            for Investigator in PubmedArticle.iter('Investigator'):
+                try:
+                    LastName = Investigator.find('LastName').text
+                    ForeName = Investigator.find('ForeName').text
+                except AttributeError:  # e.g. CollectiveName
+                    continue
+                authors.append('{}, {}'.format(LastName, ForeName))
+        if Year is None:
+            _ = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/MedlineDate')
+            Year = _.text[:4]
+            Month = '{:02d}'.format(list(calendar.month_abbr).index(_.text[5:8]))
+        else:
+            Year = Year.text
+            if Month is not None:
+                Month = Month.text
+        try:
+            for _ in (PMID.text, Volume.text, Title.text, ArticleTitle.text, MedlinePgn.text, Abstract.text, ''.join(authors)):
+                if _ is None:
+                    continue
+                assert '{' not in _, _
+                assert '}' not in _, _
+        except AttributeError:
+            pass
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        # Print the bibtex formatted output.
+        bib = {}
+        try:
+            bib["ID"] = '{}{}{}'.format(authors[0].split(',')[0], ''.join([x for x in ArticleTitle.text.split(' ') if len(x)>3][:3]), Year)
+        except IndexError:
+            print ('IndexError', pmids, file=sys.stderr, flush=True)
+        except AttributeError:
+            print ('AttributeError', pmids, file=sys.stderr, flush=True)
+        bib["Author"] = ' AND '.join(authors)
+        bib["Title"] = ArticleTitle.text
+        bib["Journal"] = Title.text
+        bib["Year"] = Year
+        if Volume is not None:
+            bib["Volume"] = Volume.text
+        if Issue is not None:
+            bib["Number"] = Issue.text
+        if MedlinePgn is not None:
+            bib["Pages"] = MedlinePgn.text
+        if Month is not None:
+            bib["Month"] = Month
+        # bib[""] = (' Abstract={{{}}},'.format(Abstract.text))
+        if PMCID is not None:
+            bib["pmcid"] = PMCID.text
+        if DOI is not None:
+            bib["doi"] = DOI.text
+        bib["ISSN"] = ISSN.text
+        bib["pmid"] = PMID.text
+        return bib
 
 
 

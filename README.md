@@ -25,3 +25,12 @@ Two new files will be written:
 # Examples
 
 python fix_citations.py -f test/eme.md
+
+# Requirements
+Python 2.7 
+bibtexparser
+
+pandoc
+pandoc-citeproc
+
+latex

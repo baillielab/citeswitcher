@@ -8,9 +8,10 @@ python fix_citations.py -f test/eme1.md -o pmid
 
 Intended use:
 Feed in a .md or .tex document
-references in square [] or curly {} brackets will be searched for:
-PMID
-doi
+references in square [] or curly {} or round brackets will be searched for PMID 
+If there is a mixture of reference types in one set of parentheses, ids with the format PMID:NNNNN will be handled correctly but spaces etc will be ignored.
+
+
 
 The default or specified .bib file will then be searched for the relevant citations. 
 Citations will be replaced with a citaion in either .md or .tex or PMID format.
@@ -20,6 +21,8 @@ Any citations not present in the master .bib file will be downloaded from pubmed
 Two new files will be written:
 1. a new .md or .tex file with correct citations
 2. a local .bib file containing all cited reference details. 
+
+
 
 
 '''
@@ -98,34 +101,11 @@ with open(args.bibfile) as bibtex_file:
 print ("read bib file")
 #-------------------
 # make dictionaries
-pmids = {}
-ids = {}
-for entry in bibdat.entries:
-    # biblatex id dict
-    try:
-        ids[entry['ID']]
-        print("duplicate ID in biblatex database:{}".format(entry["ID"]))
-        if 'pmid' in entry:
-            # replace this entry with a new one that has a PMID
-            ids[entry['ID']]=entry
-    except:
-        ids[entry['ID']]=entry
-    # pmid id dict
-    try:
-        entry["pmid"]
-    except:
-        continue
-    try:
-        pmids[entry["pmid"]]
-        print("duplicate PMID in biblatex database:{}".format(entry["pmid"]))
-    except:
-        pass
-    pmids[entry["pmid"]] = entry
+pmids, ids = citefunctions.make_dictionaries(bibdat.entries)
 #-------------------
 # find all citations
-idcitations = citefunctions.get_md_citations(text)
-idcitations += citefunctions.get_latex_citations(text)
-pmidcitations = citefunctions.get_pmid_citations(text)
+idcitations = citefunctions.get_all_id_citations(text)
+pmidcitations = citefunctions.get_all_pmid_citations(text)
 print(idcitations)
 print(pmidcitations)
 #-------------------
@@ -140,6 +120,7 @@ for thisid in idcitations:
         print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
         continue
     citefunctions.bibadd(db,ids[thisid])
+#-------------------
 # search through all the cited papers in this file and add them to the db 
 update = BibDatabase()
 for thispmid in pmidcitations:
@@ -150,7 +131,6 @@ for thispmid in pmidcitations:
         if b != 'null' and b != None:
             pmids[thispmid] = b
             print ("PMID:{} found online".format(thispmid))
-
             citefunctions.bibadd(update,pmids[thispmid])
         else:
             print ("PMID:{} NOT FOUND ON PUBMED".format(thispmid))
@@ -158,6 +138,8 @@ for thispmid in pmidcitations:
     citefunctions.bibadd(db,pmids[thispmid])
 #-----------------
 # update database with all the PMIDs we can find
+
+'''
 for entry in db.entries:
     downloaded_id_list={'error':'no id to search for'}
     if 'pmid' not in entry:
@@ -173,6 +155,14 @@ for entry in db.entries:
         found = citefunctions.search_pubmed(searchstring)
         if len(found) == 1:
             entry['pmid'] = found[0]
+    else:
+        print("no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error']))
+'''
+
+#-----------------
+# replace the ids in the text with the outputstyle
+text = citefunctions.replace_blocks(text, pmid_db=pmids, id_db=ids, outputstyle="md")
+'''
     if 'pmid' in entry:
         if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
             text = citefunctions.replace_id_with_pmid(text, thisid = entry['ID'], thispmid = entry['pmid'])
@@ -180,8 +170,7 @@ for entry in db.entries:
             text = citefunctions.replace_pmid_with_id(text, thisid = entry['ID'], thispmid = entry['pmid'], style='md')
         elif args.outputstyle == 'latex' or args.outputstyle == 'tex':  
             text = citefunctions.replace_pmid_with_id(text, thisid = entry['ID'], thispmid = entry['pmid'], style='tex')
-    else:
-        print("no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error']))
+'''
 
 #-----------------
 # save remote bibliography
@@ -196,8 +185,6 @@ cslpath = os.path.join(os.path.dirname(__file__), args.cslfile)
 text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text)
-#-----------------
-
 #-----------------
 if args.pandoc:
     # make symlink to image dir (saves the hassle of converting all refs)

@@ -18,6 +18,17 @@ import json
 import xml.etree.ElementTree as ET
 import calendar
 
+
+'''
+def read_blocks():
+    should read all blocks, latex, md or pmid, and assign to categories:
+    1. formatted latex block with recognised ids
+    2. formatted md block with recognised ids
+    3. formatted pmid block with recognised ids
+    4. block with unrecognised ids - this will be rewritten with [output] and [unmatched]
+
+'''
+
 #-------------
 def getconfig():
     cfgfile = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -90,6 +101,33 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     return '---\n{}\n...\n{}'.format('\n'.join(header), remainder)
 
 #-------------
+def make_dictionaries(bib_db):
+    pmids = {}
+    ids = {}
+    for entry in bib_db:
+        # biblatex id dict
+        try:
+            ids[entry['ID']]
+            print("duplicate ID in biblatex database:{}".format(entry["ID"]))
+            if 'pmid' in entry:
+                # replace this entry with a new one that has a PMID
+                ids[entry['ID']]=entry
+        except:
+            ids[entry['ID']]=entry
+        # pmid id dict
+        try:
+            entry["pmid"]
+        except:
+            continue
+        try:
+            pmids[entry["pmid"]]
+            print("duplicate PMID in biblatex database:{}".format(entry["pmid"]))
+        except:
+            pass
+        pmids[entry["pmid"]] = entry
+    return pmids, ids
+
+#-------------
 
 def flatten(thislist):
     listcount = [1 for x in thislist if type(x)==type([])]
@@ -116,66 +154,169 @@ def get_parethesised(thistext,parentheses=['\[.+?\]', '\{.+?\}']):
             continue
     return outlist
 
+def remove_parentheses(thistext):
+    thistext = thistext.strip()
+    for opener in ('(','[','{','\\cite{'):
+        if thistext.startswith(opener):
+            thistext = thistext[len(opener):]
+    for closer in (')','}',']'):
+        if thistext.endswith(closer):
+            thistext = thistext[:-1]
+    return thistext
+
 def get_latex_citation_blocks(inputtext):
-    return get_parethesised(inputtext, ['\\cite\{.+?\}'])
+    return get_parethesised(inputtext, ['\\\cite\{.+?\}'])
 
 def get_md_citation_blocks(inputtext):
-    return get_parethesised(inputtext, ['\[.+?\]'])
+    confirmed_blocks = []
+    for b in get_parethesised(inputtext, ['\[.+?\]']):
+        if "@" in b:
+            confirmed_blocks.append(b)
+    return confirmed_blocks
 
 def get_pmid_citation_blocks(inputtext):
     confirmed_blocks = []
-    for b in get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}']):
+    for b in get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}', '\(.+?\)']):
         if "PMID" in b or "pmid" in b:
             confirmed_blocks.append(b)
     return confirmed_blocks
 
-def split_by_delimiter(thislist, delimiters=[";",",","[","]"]):
+def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
     '''
-        input is a list of strings
         return flattened list of non-empty, stripped strings, split by delimiters
     '''
+    thislist = this_string.split()
     for d in delimiters:
         thislist = [e.split(d) for e in thislist]
         thislist = flatten(thislist)
     thislist = [e.strip() for e in thislist if e!=""]
     return thislist
 
-def get_latex_citations(inputtext):
+def get_all_id_citations(inputtext, style='latex'):
     pth = get_latex_citation_blocks(inputtext)
-    pth = split_by_delimiter(pth)
-    pth = [e.replace('cite{','').replace('}','') for e in pth]
-    return list(set(pth))
-    
-def get_md_citations(inputtext):
-    pth = get_md_citation_blocks(inputtext)
-    pth = split_by_delimiter(pth)
-    for crossreftag in ['@fig:', '@sec:', '@tbl:', '@eq:']:
-        pth = [x for x in pth if not x.startswith(crossreftag)]
-    pth = [x.replace('@','') for x in pth if x.startswith('@')]
-    return list(set(pth))
+    pth += get_md_citation_blocks(inputtext)
+    citationlist = []
+    for block in pth:
+        citationlist += parse_id_block(block)[0]
+    return list(set(citationlist))
 
-def get_pmid_citations(inputtext):
+def get_all_pmid_citations(inputtext):
     pth = get_pmid_citation_blocks(inputtext)
-    pth = split_by_delimiter(pth)
-    for p in ["PMID: ","PMID :", "pmid:", "pmid :", "pmid: "]:
-        pth = [e.replace(p, "PMID:") for e in pth]
-    pmidstyle = []
-    for x in pth:
-        if x.startswith('PMID:'):
-            # then assume this is a correctly formatted PMID
-            pmidstyle.append(x.replace('PMID:',''))
-        else:
-            # rescue some integers if they look like PMIDs
-            print(x)
-            if len(x)>4 and len(x)<10:
-                try:
-                    int(x)
-                except:
-                    continue
-                pmidstyle.append(x)
-    return pmidstyle
+    citationlist = []
+    for block in pth:
+        citationlist += parse_pmid_block(block)[0]
+    return list(set(citationlist))
 
-def bibadd(thisdb,thisentry):
+def parse_id_block(thisblock):
+    thisblock = remove_parentheses(thisblock)
+    pth = split_by_delimiter(thisblock)
+    return list(set(pth)), []
+
+def parse_pmid_block(thisblock):
+    thisblock = remove_parentheses(thisblock)
+    # better to use regex for this
+    for p in ["PMID ", "PMID: ", "pmid:", "pmid :", "pmid: "]:
+        thisblock = thisblock.replace(p, "PMID:")
+    thisblock = split_by_delimiter(thisblock)
+    pmidstyle = []
+    notpmid = []
+    for x in thisblock:
+        if x.startswith('PMID'):
+            # then assume this is a correctly formatted PMID
+            x = x.replace('PMID:','')
+            x = x.replace('PMID','')
+            x = x.strip()
+            if len(x)>0:
+                pmidstyle.append(x)
+        else:
+            print ("failed to get pmid:{}".format(x))
+            notpmid.append(x)
+    return list(set(pmidstyle)), list(set(notpmid))
+
+def id2pmid(theseids, id_db):
+    pmidlist = []
+    notpmidlist = []
+    for thisid in theseids:
+        if thisid.startswith("PMID:"):
+            pmidlist.append(thisid)
+        try:
+            pmidlist.append(ids[thisid]['PMID'])
+        except:
+            notpmidlist.append(thisid)
+    return pmidlist, notpmidlist
+
+def pmid2id(thesepmids, others, pmid_db, id_db):
+    outids = []
+    missing_ids = others
+    for pmid in thesepmids:
+        try:
+            outids.append(pmid_db[pmid]['ID'])
+        except:
+            try: 
+                id_db[pmid] # if no error, this is an id, not a pmid
+                outids.append(pmid)
+            except:
+                missing_ids.append(pmid)
+    return outids, missing_ids
+
+def pmidout(pmidlist, notpmidlist):
+    blockstring = ''
+    if len(pmidlist) > 0:
+        blockstring = '[' + ', '.join(["PMID:{}".format(x) for x in pmidlist]) + ']'
+    if len(notpmidlist) > 0:
+        blockstring += '[*' + ', '.join(notpmidlist) + ']'
+    return blockstring
+
+def texout(theseids, thesemissing=[]):
+    blockstring = ''
+    if len(theseids) > 0:
+        blockstring += "\\cite\{{}\}".format(', '.join(theseids))
+    if len(thesemissing) > 0:
+        blockstring += "[**{}]".format(', '.join(thesemissing))
+    return blockstring
+
+def mdout(theseids, thesemissing=[]):
+    blockstring = ''
+    if len(theseids) > 0:
+        blockstring += "[{}]".format(', '.join(["@{}".format(x) for x in theseids]))
+    if len(thesemissing) > 0:
+        blockstring += "[***{}]".format(', '.join(thesemissing))
+    return blockstring
+
+def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
+    # pmid first as they are the most likely to have errors
+    p = get_pmid_citation_blocks(thistext)
+    l = [x for x in get_latex_citation_blocks(thistext) if x not in p]
+    m = [x for x in get_md_citation_blocks(thistext) if x not in p and x not in l]
+    for b in m:
+        print ("markdownblock:{}".format(b))
+        theseids = parse_id_block(b)[0]
+        if outputstyle=='tex':
+            thistext = thistext.replace(b, texout(theseids))
+        elif outputstyle=='pmid':
+            pm, notpm = id2pmid(theseids, id_db)
+            thistext = thistext.replace(b, pmidout(pm, notpm))
+    for b in l:
+        print ("latexblock:{}".format(b))
+        theseids = parse_id_block(b)[0]
+        if outputstyle=='md':
+            thistext = thistext.replace(b, mdout(theseids))
+        elif outputstyle=='pmid':
+            pm, notpm = id2pmid(theseids, id_db)
+            thistext = thistext.replace(b, pmidout(pm, notpm))
+    for b in p:
+        print ("pmidblock:{}".format(b))
+        thesepmids, theseothers = parse_pmid_block(b)
+        theseids, notfound = pmid2id(thesepmids, theseothers, pmid_db, id_db)
+        if outputstyle == 'md':
+            thistext = thistext.replace(b, mdout(theseids, notfound))
+        elif outputstyle=='tex':
+            thistext = thistext.replace(b, texout(theseids, notfound))
+    return thistext
+
+#-----------------
+
+def bibadd(thisdb, thisentry):
     if thisentry is not None:
         try:
             thisentry['ENTRYTYPE']
@@ -185,52 +326,6 @@ def bibadd(thisdb,thisentry):
             thisdb[thisentry]
         except:
             thisdb.entries.append(thisentry)
-
-def convert_separators_to_preferred(thisblock, possible_separators = [',',';',' ','\t'], preferred_separator = ', '):
-    for sep in possible_separators:
-        thisblock = thisblock.replace(sep, '--|holdingseparator|--')
-    blockitems = [x for x in thisblock.split('--|holdingseparator|--') if len(x)>0]
-    return preferred_separator.join(blockitems)
-
-def replace_id_with_pmid(thistext, thisid, thispmid):
-    ''' 
-        return thistext after replacing all occurences of thisid (either a latex- or md-style reference) with thispmid
-    '''
-    #print 'replacing {} with {}'.format(thisid, thispmid)
-    pmidstring = 'PMID:{}'.format(thispmid)
-    for block in get_latex_citation_blocks(thistext):
-        newblock = block[block.find('{')+1:block.rfind('}')]
-        newblock = '['+newblock+']'
-        newblock = convert_separators_to_preferred(newblock)
-        newblock = newblock.replace(thisid, pmidstring)
-        thistext = thistext.replace('\\'+block, newblock)
-        thistext = thistext.replace(block, newblock)
-    for block in get_md_citation_blocks(thistext):
-        newblock = '['+block[1:-1]+']'
-        newblock = convert_separators_to_preferred(newblock)
-        newblock = newblock.replace('@'+thisid, pmidstring)
-        newblock = newblock.replace(thisid, pmidstring)
-        thistext = thistext.replace(block, newblock)
-    return thistext
-
-def replace_pmid_with_id(thistext, thisid, thispmid, style='tex'):
-    pmidstring = 'PMID:{}'.format(thispmid)
-    for block in get_pmid_citation_blocks(thistext):
-        if block.startswith('{') and block.endswith('}'):
-            block = '['+block[1:-1]+']'
-        newblock = block[block.find('[')+1:block.rfind(']')]
-        if style == 'tex':
-            newblock = convert_separators_to_preferred(newblock, preferred_separator=', ')
-            newblock = newblock.replace(pmidstring, thisid)
-            newblock = '\\cite{' + newblock + '}'
-        elif style == 'md':
-            if not thisid.startswith('@'):
-                thisid = '@'+thisid
-            newblock = convert_separators_to_preferred(newblock, preferred_separator='; ')
-            newblock = newblock.replace(pmidstring, thisid)
-            newblock = '[' + newblock + ']'
-        thistext = thistext.replace(block, newblock)
-    return thistext
 
 def find_similar_keys(this_string, thisdict):
     '''

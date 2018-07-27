@@ -23,8 +23,6 @@ Two new files will be written:
 2. a local .bib file containing all cited reference details. 
 
 
-
-
 '''
 
 #-------------------
@@ -48,6 +46,7 @@ parser.add_argument('-f', '--filepath',    help='filepath', default=config['test
 parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
 # - optional
 parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
+parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
 parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
@@ -161,7 +160,7 @@ for entry in db.entries:
 
 #-----------------
 # replace the ids in the text with the outputstyle
-text = citefunctions.replace_blocks(text, pmid_db=pmids, id_db=ids, outputstyle="md")
+text = citefunctions.replace_blocks(text, pmid_db=pmids, id_db=ids, outputstyle=args.outputstyle)
 '''
     if 'pmid' in entry:
         if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
@@ -180,8 +179,11 @@ with open(bibout, 'w') as biblatex_file:
 with open(args.updatebibfile, 'w') as biblatex_file:
     bibtexparser.dump(update, biblatex_file)
 #-----------------
+if args.customreplace:
+    text = citefunctions.findreplace(text, config['custom_find_replace'])
+#-----------------
 # save new text file
-cslpath = os.path.join(os.path.dirname(__file__), args.cslfile)
+cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text)

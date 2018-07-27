@@ -68,6 +68,12 @@ def callpandoc(f, out_ext, out_dir='', args="--toc "):
     subprocess.call(cmd, shell=True)
 
 #-------------
+def findreplace(inputtext, frdict):
+    for f in frd:
+        inputtext = inputtext.replace(f, frdict[f])
+    return inputtext
+
+#-------------
 def readheader(filecontents):
     '''
         Read a valid markdown header
@@ -171,14 +177,25 @@ def get_md_citation_blocks(inputtext):
     confirmed_blocks = []
     for b in get_parethesised(inputtext, ['\[.+?\]']):
         if "@" in b:
-            confirmed_blocks.append(b)
+            print (b)
+            confirmed = True
+            for crossreflabel in ['@fig:','@sec:','@tbl:','@eq:']:
+                if remove_parentheses(b).startswith(crossreflabel):
+                    confirmed = False
+            if confirmed:
+                confirmed_blocks.append(b)
     return confirmed_blocks
 
 def get_pmid_citation_blocks(inputtext):
     confirmed_blocks = []
-    for b in get_parethesised(inputtext, ['\[.+?\]', '\{.+?\}', '\(.+?\)']):
-        if "PMID" in b or "pmid" in b:
-            confirmed_blocks.append(b)
+    for theseparetheses in ['\[.+?\]', '\{.+?\}', '\(.+?\)']:
+        for b in get_parethesised(inputtext, [theseparetheses]):
+            if "PMID" in b or "pmid" in b:
+                print (b)
+                confirmed_blocks.append(b)
+                # remove this block so that nested blocks
+                # are only counted once
+                inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks
 
 def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
@@ -232,6 +249,8 @@ def parse_pmid_block(thisblock):
             print ("failed to get pmid:{}".format(x))
             notpmid.append(x)
     return list(set(pmidstyle)), list(set(notpmid))
+
+#------------
 
 def id2pmid(theseids, id_db):
     pmidlist = []
@@ -288,30 +307,37 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
     p = get_pmid_citation_blocks(thistext)
     l = [x for x in get_latex_citation_blocks(thistext) if x not in p]
     m = [x for x in get_md_citation_blocks(thistext) if x not in p and x not in l]
+    replacedict = {}
     for b in m:
-        print ("markdownblock:{}".format(b))
         theseids = parse_id_block(b)[0]
         if outputstyle=='tex':
-            thistext = thistext.replace(b, texout(theseids))
+            replacedict[b] = texout(theseids)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids, id_db)
-            thistext = thistext.replace(b, pmidout(pm, notpm))
+            replacedict[b] = pmidout(pm, notpm)
+        else:
+            continue
     for b in l:
-        print ("latexblock:{}".format(b))
         theseids = parse_id_block(b)[0]
         if outputstyle=='md':
-            thistext = thistext.replace(b, mdout(theseids))
+            replacedict[b] = mdout(theseids)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids, id_db)
-            thistext = thistext.replace(b, pmidout(pm, notpm))
+            replacedict[b] = pmidout(pm, notpm)
+        else:
+            continue
     for b in p:
-        print ("pmidblock:{}".format(b))
         thesepmids, theseothers = parse_pmid_block(b)
         theseids, notfound = pmid2id(thesepmids, theseothers, pmid_db, id_db)
         if outputstyle == 'md':
-            thistext = thistext.replace(b, mdout(theseids, notfound))
+            replacedict[b] = mdout(theseids, notfound)
         elif outputstyle=='tex':
-            thistext = thistext.replace(b, texout(theseids, notfound))
+            replacedict[b] = texout(theseids, notfound)
+        else:
+            continue
+    for b in replacedict:
+        print ("{:>70} ==> {}".format(b, replacedict[b]))
+        thistext = thistext.replace(b, replacedict[b])
     return thistext
 
 #-----------------

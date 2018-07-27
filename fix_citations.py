@@ -136,41 +136,8 @@ for thispmid in pmidcitations:
             continue
     citefunctions.bibadd(db,pmids[thispmid])
 #-----------------
-# update database with all the PMIDs we can find
-
-'''
-for entry in db.entries:
-    downloaded_id_list={'error':'no id to search for'}
-    if 'pmid' not in entry:
-        for idtype in ['doi', 'pmcid']:
-            if idtype in entry:
-                downloaded_id_list = citefunctions.id_translator(entry[idtype])
-                if 'pmid' in downloaded_id_list:
-                    entry['pmid'] = downloaded_id_list['pmid']
-                    break
-    if 'pmid' not in entry:
-        # if no success with doi or pmcid, search pubmed
-        searchstring = "{}".format(entry['title']).replace('{','').replace('}','')
-        found = citefunctions.search_pubmed(searchstring)
-        if len(found) == 1:
-            entry['pmid'] = found[0]
-    else:
-        print("no PMID found online for {}. {}".format(entry['ID'], downloaded_id_list['error']))
-'''
-
-#-----------------
 # replace the ids in the text with the outputstyle
-text = citefunctions.replace_blocks(text, pmid_db=pmids, id_db=ids, outputstyle=args.outputstyle)
-'''
-    if 'pmid' in entry:
-        if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
-            text = citefunctions.replace_id_with_pmid(text, thisid = entry['ID'], thispmid = entry['pmid'])
-        elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
-            text = citefunctions.replace_pmid_with_id(text, thisid = entry['ID'], thispmid = entry['pmid'], style='md')
-        elif args.outputstyle == 'latex' or args.outputstyle == 'tex':  
-            text = citefunctions.replace_pmid_with_id(text, thisid = entry['ID'], thispmid = entry['pmid'], style='tex')
-'''
-
+text = citefunctions.replace_blocks(text, pmids, ids, args.outputstyle)
 #-----------------
 # save remote bibliography
 with open(bibout, 'w') as biblatex_file:

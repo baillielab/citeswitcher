@@ -177,7 +177,6 @@ def get_md_citation_blocks(inputtext):
     confirmed_blocks = []
     for b in get_parethesised(inputtext, ['\[.+?\]']):
         if "@" in b:
-            print (b)
             confirmed = True
             for crossreflabel in ['@fig:','@sec:','@tbl:','@eq:']:
                 if remove_parentheses(b).startswith(crossreflabel):

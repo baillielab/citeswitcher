@@ -1,0 +1,115 @@
+v1.xxx
+======
+
+v1.0.1
+======
+
+* BUGFIX: future missing in setup.py
+
+v1.0
+====
+
+* ENH: we use pyparsing (#64) by Olivier Magin.
+* DOC: Refactoring of the tutorial
+* DOC: include docs/ in manifest
+* API: fix spelling "homogenize". Affects customization and bparser
+* API: BibtexParser: homogenize_fields is now False by default (#94)
+
+v0.6.2
+======
+
+* ENH: customization: handle various hyphens (#76).
+* ENH: writer: all values according to this maximal key width (#83).
+* END: writer: display_order allows to have custom ordering of the fields of
+each entry instead of just alphabetical (#83) by cschaffner.
+* FIX: bad support of braces in string (#90) by sangkilc.
+
+v0.6.1
+======
+
+* API: Previous type and id keywords which are automatically added to
+the dictionnary are now ENTRYTYPE and ID, respectively (#42).
+* ENH: comma first syntax support (#49) by Michal Grochmal.
+
+v0.6.0
+======
+
+* DOC: clarify version number
+* ENH: support for bibtex with leading spaces (#34)
+* FIX: if title contained multiples words in braces
+* ENH: code refactoring (#33)
+* ENH: support for comment blocks (#32)
+* ENH: Removed comma after last key-value pair by faph (#28)
+* ENH: optional keys sanitising by faph (#29)
+* FIX: missing coma at the end of a record (#24)
+* DOC: clarify the usecase of to_bibtex
+* FIX: raise exception for TypeError in to_bibtex (#22)
+
+v0.5.5
+======
+
+* ENH: json output
+* ENH: Add (optional) support for non-standard entry types by Georg C. Brückmann
+* FIX: protect uppercase only on unprotected characters. #18
+* ENH: string replacement by Uwe Schmidt (#13 #20)
+
+v0.5.4
+======
+
+* ENH: json output
+* API: enhance the naming choice for bwriter
+
+v0.5.3
+======
+
+* ENH: add writer (#16), thanks to Lucas Verney
+* MAINT: Remove non-standard --BREAK-- command detection
+* FIX: missing strip() (#14) by Sebastien Diemer
+* API breakage: the parser takes data instead of a filehandler
+
+v0.5.2
+======
+
+* ENH: fix tests latex encoding
+* ENH: support @comment @preambule (escaped)
+* ENH: check that bibtype belongs to a known type
+
+v0.5.1
+======
+
+* ENH: split keywords with various separators
+* ENH: get_entry_dict make the dict once
+* ENH: add messages with logging
+* FIX: fix unittest related to braces detection
+
+v0.5
+====
+
+* Permission from original authors and OKFN to use LGPLv3
+* ENH: Python 2.7 support
+* FIX: issue related to accents
+
+v0.4
+====
+
+* ENH: Transformations on characters are now considered as a customization
+* ENH: New customization: clean latex style
+* FIX: issue related to name processing
+
+v0.3
+====
+
+* DOC: moved to readsthedoc
+* DOC: several improvements
+* MAINT: separate customizations
+
+v0.2
+====
+
+* TEST: initialized
+* DOC: initialized
+
+v0.1
+====
+
+* First preliminary release

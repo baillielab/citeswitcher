@@ -228,22 +228,18 @@ def get_wholereference_citation_blocks(inputtext):
         for b in get_parethesised(inputtext, [theseparetheses]):
             if "." in b or ":" in b:
                 if "@" not in b and "PMID" not in b and "pmid" not in b:
-                    pmid = 'null'
-                    pub = search_pubmed(remove_parentheses(b))
+                    lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
+                    title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
+                    pub = search_pubmed(title, "title")
                     if len(pub) == 1:
                         pmid = pub[0]
-                    elif len(pub) == 0:
-                        lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
-                        title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
-                        pub = search_pubmed(title)
-                        if len(pub) == 1:
-                            pmid = pub[0]
-                    if pmid != 'null':
+                        print ("------\n\
+                            ## Reference block (PMID:{}) found. \
+                            Please check that input:\n{}\n\
+                            Is the same as the found citation:\n{}\n\n"\
+                            .format(pmid, b, p2b(pmid)))
                         confirmed_blocks[pmid] = b
-                        # remove this block so that nested blocks
-                        # are only counted once
                         inputtext = inputtext.replace(b, '---citationblockremoved---')
-                        print ("------\n## Reference block (PMID:{}) found. Please check that input:\n{}\nIs the same as the found citation:\n{}\n\n".format(pmid, b, p2b(pmid)))
     return confirmed_blocks
 
 def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
@@ -295,8 +291,15 @@ def parse_pmid_block(thisblock):
             if len(x)>0:
                 pmidstyle.append(x)
         else:
-            print ("failed to get pmid:{}".format(x))
-            notpmid.append(x)
+            try:
+                found = get_article_from_pmid(x)
+                if found['PMID'] == x:
+                    pmidstyle.append(x)
+                else:
+                    raise ValueError('found mroe than one')
+            except:
+                print ("failed to get pmid:{}".format(x))
+                notpmid.append(x)                                
     return list(set(pmidstyle)), list(set(notpmid))
 
 #------------
@@ -485,16 +488,16 @@ def id_translator(thisid):
     else:
         return {'error':"fail: not found, not trying pubmed"}
     
-def search_pubmed(search_string):
+def search_pubmed(search_string, restrictfields=""):
     '''return a list of pmids for articles found by a search string'''
     max_returns = 500
     days = "all"
-    handle = Entrez.esearch(db="pubmed", term=search_string, retmax=max_returns, rettype="medline")
+    handle = Entrez.esearch(db="pubmed", term=search_string, retmax=max_returns, rettype="medline", field=restrictfields)
     r = Entrez.read(handle)
     return r['IdList']
 
 def get_links_from_pmid(pmid):
-    return Entrez.elink(dbfrom="pubmed",id=pmid,cmd="prlinks")
+    return Medline.parse(Entrez.elink(dbfrom="pubmed",id=pmid,cmd="prlinks"))
 
 def get_article_from_pmid(pmid):
     output = Entrez.efetch(db="pubmed", id=pmid, rettype="medline", retmode="text")

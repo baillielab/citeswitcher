@@ -2,7 +2,7 @@ import subprocess
 import os
 
 import citefunctions
-config = citefunctions.getconfig()
+config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()

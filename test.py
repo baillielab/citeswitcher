@@ -7,6 +7,7 @@ import string,os,sys
 cwd = os.getcwd()
 sys.path.append(cwd)
 import citefunctions
+config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
 #-------------------
 alltests = False
 #-------------------
@@ -23,12 +24,10 @@ text3 = 'In addition to direct sedative effects on the central nervous system, a
 
 
 def test_replacement(thistext):
-    btid = 'bibtexid'
-    pmid = '1234xx1243'
+    bibdat = citefunctions.read_bib_file('test/formatted/eme.bib')
+    pmids, ids = citefunctions.make_dictionaries(bibdat.entries)
     print(thistext)
-    print(citefunctions.replace_id_with_pmid(thistext, thisid = btid, thispmid = pmid))
-    print(citefunctions.replace_pmid_with_id(thistext, thisid = btid, thispmid = pmid, style='tex'))
-    print(citefunctions.replace_pmid_with_id(thistext, thisid = btid, thispmid = pmid, style='md'))
+    print(citefunctions.replace_blocks(thistext,pmids, ids, 'pmid'))
 
 def test_mdcite():
     print(citefunctions.get_md_citations(text1))
@@ -70,14 +69,20 @@ def test_replaceblocks():
     ids={}
     print (citefunctions.replace_blocks(text1, {}, {}, 'md'))
 
-test_replaceblocks()
+def test_par():
+    thistext = 'asdf [ asf aas d as [asdf ]asf asdf asdf] ads fa sdf'
+    print (thistext)
+    print ("EEE:", citefunctions.get_parethesised(thistext))
+
+test_par()
+#test_replaceblocks()
 #test_addhead('test/eme.txt')
 #test_readhead('test/eme.txt')
 #test_p2b('29494619')
 #test_p2b(29494619)
 #test_p2b('xxxx')
 #test_translator()
-#test_replacement(text3)
+#test_replacement(text2)
 #test_mdcite()
 #test_latexcite()
 #test_translator()

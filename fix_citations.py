@@ -28,16 +28,14 @@ Two new files will be written:
 #-------------------
 import string,os,sys
 import io
-import bibtexparser
 import subprocess
+import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 #-------------------
-cwd = os.getcwd()
-sys.path.append(cwd)
 import citefunctions
-config = citefunctions.getconfig()
+config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
@@ -53,12 +51,6 @@ parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['
 parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
 parser.add_argument('-i', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
 args = parser.parse_args()
-#-------------------
-# correct ~ for the right path to home dir on linux or mac
-home_dir_abspath = citefunctions.get_home_dir()
-args.filepath = args.filepath.replace("~",home_dir_abspath)
-args.bibfile = args.bibfile.replace("~",home_dir_abspath)
-args.updatebibfile = args.updatebibfile.replace("~",home_dir_abspath)
 #-------------------
 print(args.filepath)
 filetype = "unknown filetype"
@@ -94,10 +86,7 @@ with io.open(args.filepath, "r", encoding="utf-8") as my_file:
 text = citefunctions.make_unicode(text)
 print ("read input file")
 #-------------------
-# read bibtex file
-with open(args.bibfile) as bibtex_file:
-    bibdat = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse_file(bibtex_file)
-print ("read bib file")
+bibdat = citefunctions.read_bib_file(args.bibfile)
 #-------------------
 # make dictionaries
 pmids, ids = citefunctions.make_dictionaries(bibdat.entries)
@@ -126,11 +115,12 @@ for thispmid in pmidcitations:
     try:
         pmids[thispmid]
     except:
-        b = citefunctions.p2b(thispmid)
-        if b != 'null' and b != None:
-            pmids[thispmid] = b
-            print ("PMID:{} found online".format(thispmid))
-            citefunctions.bibadd(update,pmids[thispmid])
+        b = citefunctions.p2b([str(thispmid)])
+        if len(b)>0:
+            if b[0] != 'null' and b[0] != None:
+                pmids[thispmid] = b[0]
+                print ("PMID:{} found online".format(thispmid))
+                citefunctions.bibadd(update,pmids[thispmid])
         else:
             print ("PMID:{} NOT FOUND ON PUBMED".format(thispmid))
             continue
@@ -140,11 +130,11 @@ for thispmid in pmidcitations:
 text = citefunctions.replace_blocks(text, pmids, ids, args.outputstyle)
 #-----------------
 # save remote bibliography
-with open(bibout, 'w') as biblatex_file:
-    bibtexparser.dump(db, biblatex_file)
+with open(bibout, 'w') as bf:
+    bibtexparser.dump(db, bf)
 # save update bibliography
-with open(args.updatebibfile, 'w') as biblatex_file:
-    bibtexparser.dump(update, biblatex_file)
+with open(args.updatebibfile, 'w') as bf:
+    bibtexparser.dump(update, bf)
 #-----------------
 if args.customreplace:
     text = citefunctions.findreplace(text, config['custom_find_replace'])

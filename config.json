@@ -1,7 +1,7 @@
 {
     "toolname": "citeswitcher",
-    "default_bibfile": "~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.bib",
-    "default_updatebibfile": "~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib_update_auto.bib",
+    "default_bibfile": "/Users/jkb/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.bib",
+    "default_updatebibfile": "/Users/jkb/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib_update_auto.bib",
     "email": "bio.entrez@sidies.com",
     "testfile": "test/eme.md",
     "cslfile": "sup-files/csl/nature.csl",

@@ -2,7 +2,6 @@
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
-
 import platform
 import re
 import string
@@ -17,37 +16,25 @@ from Bio import Medline
 import json
 import xml.etree.ElementTree as ET
 import calendar
-
-
-'''
-def read_blocks():
-    should read all blocks, latex, md or pmid, and assign to categories:
-    1. formatted latex block with recognised ids
-    2. formatted md block with recognised ids
-    3. formatted pmid block with recognised ids
-    4. block with unrecognised ids - this will be rewritten with [output] and [unmatched]
-
-'''
+import bibtexparser
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.bwriter import BibTexWriter
+from bibtexparser.bibdatabase import BibDatabase
 
 #-------------
-def getconfig():
-    cfgfile = os.path.join(os.path.dirname(__file__), 'config.json')
+def getconfig(cfgfile):
     with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
+    try:
+        Entrez.email = data['email']
+    except:
+        pass
+    try:
+        Entrez.tool = data['toolname']
+    except:
+        pass
     return data
 #-------------
-config = getconfig()
-Entrez.email=config['email']
-#-------------
-def get_home_dir():
-    if platform.system()=="Linux":
-        return config['linux_home']
-    elif platform.system()=="Darwin":
-        return config['mac_home']
-    else: 
-        print("*** unrecognised operating system (citefunctions.get_home_dir()): {} ***".format(platform.system()))
-        sys.exit()
-
 def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
     
@@ -67,9 +54,36 @@ def callpandoc(f, out_ext, out_dir='', args="--toc "):
     print (cmd)
     subprocess.call(cmd, shell=True)
 
+def read_bib_file(bibfile):
+    # read bibtex file
+    try:
+        size = os.path.getsize(bibfile)
+    except:
+        print ("bib file not found at {}".format(bibfile))
+        sys.exit()
+    if size > 0:
+        with open(bibfile) as bf:
+            bibdb = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse_file(bf)
+    else:
+        bibdb = BibDatabase()
+        print ("bib file empty: {}".format(bibfile))
+    return bibdb
+
+def sort_db(thisdb, sortby="year"):
+    sorter = {}
+    for this_entry in thisdb.entries:
+        s = this_entry[sortby]
+        try:
+            s = int(s)
+        except:
+            pass
+        sorter[this_entry['ID']] = s
+    ids = [key for key, value in sorted(iter(sorter.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)]
+    thisdb.entries = [thisdb.entries_dict[thisid] for thisid in ids]
+
 #-------------
 def findreplace(inputtext, frdict):
-    for f in frd:
+    for f in frdict:
         inputtext = inputtext.replace(f, frdict[f])
     return inputtext
 
@@ -158,7 +172,18 @@ def get_parethesised(thistext,parentheses=['\[.+?\]', '\{.+?\}']):
             outlist += re.findall(p,thistext)
         except:
             continue
-    return outlist
+    # now replace nested parentheses with the internally nested ones
+    nested_out = []
+    for item in outlist:
+        o = item[1:]
+        qout = []
+        for p in parentheses:
+            qout += re.findall(p, o)
+        if len(qout) > 0:
+            nested_out += qout
+        else:
+            nested_out.append(item)
+    return nested_out
 
 def remove_parentheses(thistext):
     thistext = thistext.strip()
@@ -197,6 +222,30 @@ def get_pmid_citation_blocks(inputtext):
                 inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks
 
+def get_wholereference_citation_blocks(inputtext):
+    confirmed_blocks = {}
+    for theseparetheses in ['\[.+?\]', '\{.+?\}', '\(.+?\)']:
+        for b in get_parethesised(inputtext, [theseparetheses]):
+            if "." in b or ":" in b:
+                if "@" not in b and "PMID" not in b and "pmid" not in b:
+                    pmid = 'null'
+                    pub = search_pubmed(remove_parentheses(b))
+                    if len(pub) == 1:
+                        pmid = pub[0]
+                    elif len(pub) == 0:
+                        lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
+                        title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
+                        pub = search_pubmed(title)
+                        if len(pub) == 1:
+                            pmid = pub[0]
+                    if pmid != 'null':
+                        confirmed_blocks[pmid] = b
+                        # remove this block so that nested blocks
+                        # are only counted once
+                        inputtext = inputtext.replace(b, '---citationblockremoved---')
+                        print ("------\n## Reference block (PMID:{}) found. Please check that input:\n{}\nIs the same as the found citation:\n{}\n\n".format(pmid, b, p2b(pmid)))
+    return confirmed_blocks
+
 def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
     '''
         return flattened list of non-empty, stripped strings, split by delimiters
@@ -226,6 +275,7 @@ def get_all_pmid_citations(inputtext):
 def parse_id_block(thisblock):
     thisblock = remove_parentheses(thisblock)
     pth = split_by_delimiter(thisblock)
+    pth = [x.replace("@","") for x in pth if x.startswith('@')]
     return list(set(pth)), []
 
 def parse_pmid_block(thisblock):
@@ -258,9 +308,19 @@ def id2pmid(theseids, id_db):
         if thisid.startswith("PMID:"):
             pmidlist.append(thisid)
         try:
-            pmidlist.append(ids[thisid]['PMID'])
+            pmidlist.append(id_db[thisid]['PMID'])
         except:
-            notpmidlist.append(thisid)
+            try:
+                pmidlist.append(id_db[thisid]['pmid'])
+            except:
+                print ("pmid not found: {}. Searching online...".format(thisid))
+                try:
+                    ids = id_translator(id_db[thisid]['doi'])
+                except:
+                    notpmidlist.append(thisid)
+                    continue
+                pmidlist.append(ids['pmid'])
+                id_db[thisid]['PMID'] = ids['pmid']
     return pmidlist, notpmidlist
 
 def pmid2id(thesepmids, others, pmid_db, id_db):
@@ -296,7 +356,7 @@ def texout(theseids, thesemissing=[]):
 def mdout(theseids, thesemissing=[]):
     blockstring = ''
     if len(theseids) > 0:
-        blockstring += "[{}]".format(', '.join(["@{}".format(x) for x in theseids]))
+        blockstring += "[{}]".format('; '.join(["@{}".format(x) for x in theseids]))
     if len(thesemissing) > 0:
         blockstring += "[***{}]".format(', '.join(thesemissing))
     return blockstring
@@ -306,6 +366,8 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
     p = get_pmid_citation_blocks(thistext)
     l = [x for x in get_latex_citation_blocks(thistext) if x not in p]
     m = [x for x in get_md_citation_blocks(thistext) if x not in p and x not in l]
+    wr = get_wholereference_citation_blocks(thistext) # dict because only found articles included
+    r = {x:wr[x] for x in wr if wr[x] not in p and wr[x] not in l and wr[x] not in m}
     replacedict = {}
     for b in m:
         theseids = parse_id_block(b)[0]
@@ -334,6 +396,20 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
             replacedict[b] = texout(theseids, notfound)
         else:
             continue
+    for pmid in r:
+        b = r[pmid]
+        thesepmids = [pmid]
+        theseothers = []
+        if outputstyle=='pmid':
+            replacedict[b] = pmid
+        else:
+            theseids, notfound = pmid2id(thesepmids, theseothers, pmid_db, id_db)
+            if outputstyle == 'md':
+                replacedict[b] = mdout(theseids, notfound)
+            elif outputstyle=='tex':
+                replacedict[b] = texout(theseids, notfound)
+            else:
+                continue
     for b in replacedict:
         print ("{:>70} ==> {}".format(b, replacedict[b]))
         thistext = thistext.replace(b, replacedict[b])
@@ -342,6 +418,9 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
 #-----------------
 
 def bibadd(thisdb, thisentry):
+    '''
+        add new reference at START of entries
+    '''
     if thisentry is not None:
         try:
             thisentry['ENTRYTYPE']
@@ -350,7 +429,8 @@ def bibadd(thisdb, thisentry):
         try:
             thisdb[thisentry]
         except:
-            thisdb.entries.append(thisentry)
+            #thisdb.entries.append(thisentry)
+            thisdb.entries = [thisentry] + thisdb.entries
 
 def find_similar_keys(this_string, thisdict):
     '''
@@ -373,7 +453,7 @@ def id_translator(thisid):
     search pubmed API; return dict of {'pmid':PMID, 'pmcid':PMCID, 'doi':DOI, 'error':'errormessage'} where available
     '''
     # PMCID must start with PMC
-    searchstring = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool={}&email={}&ids={}&format=json".format(config['toolname'], Entrez.email, thisid)
+    searchstring = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool={}&email={}&ids={}&format=json".format(Entrez.tool, Entrez.email, thisid)
     r = requests.get(searchstring)
     r = json.loads(r.text)
     dopubmed = False
@@ -434,17 +514,20 @@ def get_doi_from_pmid(pmid):
 # --------------------
 # by Nick Loman
 
-def p2b(thispmid):
+def p2b(pmids):
     ''' by Nick Loman '''
+
+    if type(pmids) != list:
+        pmids = [pmids]
 
     ## Fetch XML data from Entrez.
     efetch = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
-    pmids = [str(thispmid)]
     url = '{}?db=pubmed&id={}&rettype=abstract'.format(efetch, ','.join(pmids))
     r = requests.get(url)
     ##print(r.text) # to examine the returned xml
 
     ## Loop over the PubMed IDs and parse the XML using https://docs.python.org/2/library/xml.etree.elementtree.html
+    bibout = []
     root = ET.fromstring(r.text)
     for PubmedArticle in root.iter('PubmedArticle'):
         PMID = PubmedArticle.find('./MedlineCitation/PMID')
@@ -502,14 +585,24 @@ def p2b(thispmid):
         except AttributeError:
             pass
 
-        # Print the bibtex formatted output.
+        # make the bibtex formatted output.
         bib = {}
-        try:
-            bib["ID"] = '{}{}{}'.format(authors[0].split(',')[0], ''.join([x for x in ArticleTitle.text.split(' ') if len(x)>3][:3]), Year)
-        except IndexError:
-            print ('IndexError', pmids, file=sys.stderr, flush=True)
-        except AttributeError:
-            print ('AttributeError', pmids, file=sys.stderr, flush=True)
+        if len(authors)>0:
+            authorname = authors[0].split(',')[0]
+        else:
+            authorname = ''
+        titlewords = [x for x in ArticleTitle.text.split(' ') if len(x)>3]
+        if len(titlewords)>2:
+            titlestring = ''.join(titlewords[:3])
+        elif len(titlewords)>0:
+            titlestring = ''.join(titlewords)
+        else:
+            titlestring = ''
+        if len(authorname+titlestring)==0:
+            titlestring = "PMID{}_".format(PMID.text)
+        new_id = '{}{}{}'.format(authorname, titlestring, Year)
+        new_id = re.sub(r'\W+', '', new_id)
+        bib["ID"] = new_id
         bib["Author"] = ' AND '.join(authors)
         bib["Title"] = ArticleTitle.text
         bib["Journal"] = Title.text
@@ -529,10 +622,24 @@ def p2b(thispmid):
             bib["doi"] = DOI.text
         bib["ISSN"] = ISSN.text
         bib["pmid"] = PMID.text
-        return bib
 
+        bibout.append(bib)
+    return bibout
 
+#---------------
 
+def getlink(entry):
+    '''
+        return DOI link,  PMC link, or PMID link in that order 
+    '''
+    try:
+        url = "http://dx.doi.org/{}".format(entry['doi'])
+    except:
+        try:
+            url = "https://www.ncbi.nlm.nih.gov/pmc/articles/{}/".format(entry['pmcid'])
+        except:
+            url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
+    return url
 
 
 

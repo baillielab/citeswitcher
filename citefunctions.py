@@ -50,7 +50,7 @@ def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
 def callpandoc(f, out_ext, out_dir='', args="--toc "):
-    cmd = 'pandoc {} --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
+    cmd = 'pandoc {}  --number-sections --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
     print (cmd)
     subprocess.call(cmd, shell=True)
 
@@ -643,13 +643,3 @@ def getlink(entry):
         except:
             url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
     return url
-
-
-
-
-
-
-
-
-
-

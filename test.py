@@ -19,7 +19,7 @@ def test_translator():
 
 text0 = 'this is some ´ ` ´´®†©¨¥© text with a in [@bibtexid] in it  (‘A2B trial’).'
 text1 = 'The safety and efficacy of medication practice \cite{wang} is at least partly determined genetically[PMID:23423423 PMID 23421432; PMID :234231424].  CPIC dosing guidelines[\\cite{relling_cpic_2011}], based on pretreatment testing for multiple single gene-drug interactions, exist for 100 drugs [\\cite{noauthor_pharmgkb_nodate}, #cite{whirl-carrillo_pharmacogenomics_2012}] and there is RCT evidence for a limited number of guidelines [\\cite{price_pharmacogenomic_2013}].  There are identified alleles for both dexmedetomidine [\\cite{posti_polymorphism_2013, yagar_role_2011, kurnik_genetic_2011}] and clonidine [@nurnberger_effect_2003; @yang_association_2010] which affect the metabolism or molecular pathways of the drugs, and which are associated with differential treatment efficacy (DTE) in groups of patients which are identifiable pretreatment.'
-text2 = 'In addition to the sedative effect for which illness[@KimEffectsdexmedetomidineratio2014; @Sedationimprovesearly2009], which may mediate'
+text2 = 'In addition to the sedative [@RenardValidationlongitudinallymeasured2003] effect for which illness[@KimEffectsdexmedetomidineratio2014; @Sedationimprovesearly2009], which may mediate'
 text3 = 'In addition to direct sedative effects on the central nervous system, alpha_2-agonistsmodulate [@bibtexid; PMID:1234xx1243]. We hypothesise that detectable, modifiable inflammator signals in peripheral blood cause delirium in some patients[@bibtexid] Also \\cite{bibtexid}.'
 
 
@@ -74,6 +74,16 @@ def test_par():
     print (thistext)
     print ("EEE:", citefunctions.get_parethesised(thistext))
 
+def test_bibadd():
+    bibdat = citefunctions.read_bib_file('test/formatted/eme.bib')
+    new = citefunctions.p2b(['PMID: 26524966'])[0]
+    citefunctions.bibadd(bibdat, new)
+    print (bibdat)
+
+
+
+test_bibadd()
+#test_replacement(text2)
 #test_par()
 #test_replaceblocks()
 #test_addhead('test/eme.txt')
@@ -82,7 +92,6 @@ def test_par():
 #test_p2b(29494619)
 #test_p2b('xxxx')
 #test_translator()
-test_replacement(text2)
 #test_mdcite()
 #test_latexcite()
 #test_translator()

@@ -2964,6 +2964,9 @@ lc2 = [
     ["th", "þ"],
     #--new additions--
     ["s", "ş"],
+    ["k", "к"],
+    ["i", "ı"],
+    ["-", "‑"],
 ]
 
 
@@ -2983,8 +2986,8 @@ def replace_accents(thistext, mode="biblatex"):
         thistext = thistext.replace(char, switchlatex[char])
     return thistext
 
-
-
+def cleanbib(bibtex_entry):
+    return {d:replace_accents(bibtex_entry[d]) for d in bibtex_entry.keys()}
 
 
 

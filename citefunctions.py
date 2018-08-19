@@ -49,7 +49,7 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
-def callpandoc(f, out_ext, out_dir='', args="--toc "):
+def callpandoc(f, out_ext, out_dir='', args=""):
     cmd = 'pandoc {} --number-sections --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
     print (cmd)
     subprocess.call(cmd, shell=True)
@@ -321,15 +321,18 @@ def id2pmid(theseids, id_db):
             pmidlist.append(id_db[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
-            print (thisid)
             pub = search_pubmed(id_db[thisid]['doi'], "doi")
-            print (pub)
             if len(pub) == 1:
                 pmid = pub[0]
-                print (pmid)
                 pmidlist.append(pmid)
                 id_db[thisid]['PMID'] = pmid
             else:
+                pub = search_pubmed(id_db[thisid]['title'], "title")
+                if len(pub) == 1:
+                    pmid = pub[0]
+                    p = p2b(pmid)
+                    print ("maybe rescued? Not included as this code not written yet...")
+                    print (p)
                 notpmidlist.append(thisid)
                 continue
     return pmidlist, notpmidlist
@@ -428,7 +431,8 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
             else:
                 continue
     for b in replacedict:
-        if b == 'null':
+        if replacedict[b] == 'null':
+            print ("{:>70} left alone".format(b))
             continue
         print ("{:>70} ==> {}".format(b, replacedict[b]))
         thistext = thistext.replace(b, replacedict[b])
@@ -448,7 +452,7 @@ def bibadd(thisdb, thisentry):
         try:
             thisdb[thisentry]
         except:
-            #thisdb.entries.append(thisentry)
+            thisentry = latexchars.cleanbib(thisentry)
             thisdb.entries = [thisentry] + thisdb.entries
 
 def find_similar_keys(this_string, thisdict):
@@ -464,8 +468,8 @@ def find_similar_keys(this_string, thisdict):
             topscore = sim
     return bestmatch
 
-
 #------ PUBMED FUCTIONS -------
+
 def search_pubmed(search_string, restrictfields=""):
     '''return a list of pmids for articles found by a search string'''
     max_returns = 500
@@ -622,3 +626,8 @@ def getlink(entry):
         except:
             url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
     return url
+
+
+
+
+

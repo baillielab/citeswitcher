@@ -35,6 +35,11 @@ def getconfig(cfgfile):
         pass
     return data
 #-------------
+markdown_labels_to_ignore = [
+    '@fig:','@sec:','@tbl:','@eq:',
+    '#fig:','#sec:','#tbl:','#eq:'
+    ]
+#-------------
 def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
     
@@ -202,7 +207,7 @@ def get_md_citation_blocks(inputtext):
     for b in get_parethesised(inputtext, ['\[.+?\]']):
         if "@" in b:
             confirmed = True
-            for crossreflabel in ['@fig:','@sec:','@tbl:','@eq:']:
+            for crossreflabel in markdown_labels_to_ignore:
                 if remove_parentheses(b).startswith(crossreflabel):
                     confirmed = False
             if confirmed:
@@ -222,13 +227,17 @@ def get_pmid_citation_blocks(inputtext):
 
 def get_wholereference_citation_blocks(inputtext):
     confirmed_blocks = {}
-    for theseparetheses in ['\[.+?\]', '\{.+?\}', '\(.+?\)']:
+    for theseparetheses in ['\[.+?\]', '\{.+?\}']:
         for b in get_parethesised(inputtext, [theseparetheses]):
             if "." in b or ":" in b:
-                if "@" not in b and "PMID" not in b and "pmid" not in b:
-                    lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
-                    title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
-                    pub = search_pubmed(title, "title")
+                if "@" not in b and "PMID" not in b and "pmid" not in b and "#" not in b:
+                    # try searching for the whole ref
+                    pub = search_pubmed(b)
+                    if len(pub) != 1:
+                        # try searching just for the title (the longest sentence in the ref)
+                        lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
+                        title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
+                        pub = search_pubmed(title, "title")
                     if len(pub) == 1:
                         pmid = pub[0]
                         p = p2b(pmid)
@@ -589,7 +598,7 @@ def p2b(pmids):
         new_id = re.sub(r'\W+', '', new_id)
         new_id = latexchars.replace_accents(new_id, mode="biblatex")
         bib["ID"] = new_id
-        bib["Author"] = ' AND '.join(authors)
+        bib["Author"] = ' and '.join(authors)
         bib["Title"] = ArticleTitle.text
         bib["Journal"] = Title.text
         bib["Year"] = Year

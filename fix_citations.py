@@ -65,7 +65,8 @@ elif args.filepath.endswith(".tex"):
 #-------------------
 outpath, filename = os.path.split(args.filepath)
 outpath = os.path.join(outpath, args.outputsubdir)
-citefunctions.check_dir(outpath)
+if outpath != '':
+    citefunctions.check_dir(outpath)
 filestem = '.'.join(filename.split('.')[:-1])
 bibout = os.path.join(outpath, filestem+".bib")
 #-------------------
@@ -111,13 +112,17 @@ for thisid in idcitations:
 #-------------------
 # search through all the cited papers in this file and add them to the db 
 update = BibDatabase()
+pmids_to_add_to_inputdb = []
 for thispmid in pmidcitations:
     try:
+        # always look in the existing bib db first
         pmids[thispmid]
     except:
+        # if not in db, look online
         b = citefunctions.p2b([str(thispmid)])
         if len(b)>0:
             if b[0] != 'null' and b[0] != None:
+                pmids_to_add_to_inputdb.append(thispmid)
                 pmids[thispmid] = b[0]
                 print ("PMID:{} found online".format(thispmid))
                 citefunctions.bibadd(update,pmids[thispmid])
@@ -135,6 +140,10 @@ with open(bibout, 'w') as bf:
 # save update bibliography
 with open(args.updatebibfile, 'w') as bf:
     bibtexparser.dump(update, bf)
+if len(pmids_to_add_to_inputdb)>0:
+    print ("\nURL for batch import to reference manager [CMD+dbl_click]:")
+    print ("https://www.ncbi.nlm.nih.gov/pubmed/?term={}\n".format\
+        ('&term='.join(["{}[pmid]".format(x) for x in pmids_to_add_to_inputdb])))
 #-----------------
 if args.customreplace:
     text = citefunctions.findreplace(text, config['custom_find_replace'])
@@ -143,7 +152,7 @@ if args.customreplace:
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
-    file.write(text)
+    file.write(text+"\n\n")
 #-----------------
 if args.pandoc:
     # make symlink to image dir (saves the hassle of converting all refs)

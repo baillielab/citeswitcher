@@ -9,7 +9,9 @@
 '''
 
 #-------------------
-import string,os,sys
+import string
+import sys
+import os
 import io
 import json
 import subprocess
@@ -26,9 +28,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
 args = parser.parse_args()
 #-------------------
-outbib = args.bibfile.replace('.bib','.pmid.bib')
-speedup_store = args.bibfile.replace('.bib','.pmid.json')
-bibdat = citefunctions.read_bib_file(args.bibfile)
+bibfile = os.path.expanduser(args.bibfile)
+#-------------------
+outbib = bibfile.replace('.bib','.pmid.bib')
+speedup_store = bibfile.replace('.bib','.pmid.json')
+bibdat = citefunctions.read_bib_file(bibfile)
 #-------------------
 if os.path.exists(speedup_store):
     with open(speedup_store) as f:

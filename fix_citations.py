@@ -93,58 +93,11 @@ with io.open(args.filepath, "r", encoding="utf-8") as my_file:
 text = citefunctions.make_unicode(text)
 print ("read input file")
 #-------------------
-bibdat = citefunctions.read_bib_file(args.bibfile)
-bib.make_dictionaries(bibdat.entries)
-#-------------------
-
-'''
-#-------------------
-# find all citations
-idcitations = citefunctions.get_all_id_citations(text)
-pmidcitations = citefunctions.get_all_pmid_citations(text)
-latexcitations = citefunctions.get_latex_citation_blocks(text)
-othercitations = citefunctions.get_wholereference_citation_blocks(text)
-#-------------------
-# make new output database
-#-------------------
-update = BibDatabase()
-pmids_to_add_to_inputdb = []
-# search through all the cited papers in this file and add them to the db 
-for thisid in [idcitations+latexcitations]:
-    print(thisid)
-    try:
-        ids[thisid]
-    except:
-        bestmatchingkey = citefunctions.find_similar_keys(thisid, ids)
-        print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
-        continue
-    citefunctions.bibadd(db,ids[thisid])
-
-for thispmid in pmidcitations:
-    try:
-        # always look in the existing bib db first
-        pmids[thispmid]
-    except:
-        # if not in db, look online
-        b = citefunctions.p2b([str(thispmid)])
-        if len(b)>0:
-            if b[0] != 'null' and b[0] != None:
-                pmids_to_add_to_inputdb.append(thispmid)
-                pmids[thispmid] = b[0]
-                print ("PMID:{} found online".format(thispmid))
-                citefunctions.bibadd(update,pmids[thispmid])
-        else:
-            print ("PMID:{} NOT FOUND ON PUBMED".format(thispmid))
-            continue
-    citefunctions.bibadd(db,pmids[thispmid])
-
-for thispmid in othercitations:
-    citefunctions.bibadd(update,othercitations[thispmid])
-'''
-
+bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
+bib.make_dictionaries()
 #-----------------
 # replace the ids in the text with the outputstyle
-text = citefunctions.replace_blocks(text, bibdat, args.outputstyle)
+text = citefunctions.replace_blocks(text, args.outputstyle)
 #-----------------
 # save remote bibliography
 with open(bibout, 'w') as bf:
@@ -170,7 +123,7 @@ if args.pandoc:
     # make symlink to image dir (saves the hassle of converting all refs)
     home_img = os.path.abspath(os.path.join(os.path.split(args.filepath)[0], args.imagedir))
     subdir_img = os.path.abspath(os.path.join(outpath,args.imagedir))
-    if not os.path.exists(subdir_img):
+    if os.path.exists(home_img) and not os.path.exists(subdir_img):
         cmd = "ln -s {} {}".format(home_img, subdir_img)
         print (cmd)
         subprocess.call(cmd, shell=True)

@@ -374,15 +374,15 @@ def id2pmid(theseids):
     for thisid in theseids:
         # try to find this id
         try:
-            bib.ids[thisid]
+            full_bibdat.entries[thisid]
         except:
-            bestmatchingkey = citefunctions.find_similar_keys(thisid, bib.ids)
+            bestmatchingkey = citefunctions.find_similar_keys(thisid, full_bibdat.entries)
             print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
             continue
         # if it is found, try to get the pmid
-        if 'PMID' in bib.ids[thisid]:
+        if 'PMID' in full_bibdat.entries[thisid]:
             pmidlist.append(ids[thisid]['PMID'])
-        elif 'pmid' in bib.ids[thisid]:
+        elif 'pmid' in full_bibdat.entries[thisid]:
             pmidlist.append(ids[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
@@ -403,17 +403,14 @@ def pmid2id(thesepmids, others):
     for pmid in thesepmids:
         try:
             outids.append(bib.pmids[pmid]['ID'])
+            bib.supplement(bib.pmids[pmid]['ID'])
         except:
-            try: 
-                bib.ids[pmid] # if no error, this is an id, not a pmid
-                outids.append(pmid)
-            except:
-                new_entry = findcitation(pmid, 'pmid')
-                if new_entry is not None:
-                    outids.append(new_entry['ID'])
-                    bib.new(new_entry)
-                else:
-                    missing_ids.append(pmid)
+            new_entry = findcitation(pmid, 'pmid')
+            if new_entry is not None:
+                outids.append(new_entry['ID'])
+                bib.new(new_entry)
+            else:
+                missing_ids.append(pmid)
     return outids, missing_ids
 
 #------------
@@ -432,6 +429,7 @@ def pmidout(pmidlist, notpmidlist):
 def texout(theseids, thesemissing=[]):
     blockstring = ''
     if len(theseids) > 0:
+        bib.supplement(theseids)
         blockstring += "\\cite\{{}\}".format(', '.join(theseids))
         if len(thesemissing) > 0:
             blockstring += "[**{}]".format(', '.join(thesemissing))
@@ -449,7 +447,7 @@ def mdout(theseids, thesemissing=[]):
         blockstring = 'null'
     return blockstring
 
-def replace_blocks(thistext, bd, outputstyle="md"):
+def replace_blocks(thistext, outputstyle="md"):
     # pmid first as they are the most likely to have errors
     p = get_pmid_citation_blocks(thistext)
     l = [x for x in get_latex_citation_blocks(thistext) if x not in p]
@@ -458,26 +456,26 @@ def replace_blocks(thistext, bd, outputstyle="md"):
     r = {x:wr[x] for x in wr if wr[x] not in p+l+m}
     replacedict = {}
     for b in m:
-        theseids = parse_id_block(b)[0]
+        theseids = parse_id_block(b)[0]  # ids added to bib
         if outputstyle=='tex':
             replacedict[b] = texout(theseids)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids)
+            pm, notpm = id2pmid(theseids) # ids added to bib
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
     for b in l:
-        theseids = parse_id_block(b)[0]
+        theseids = parse_id_block(b)[0]  # ids added to bib
         if outputstyle=='md':
             replacedict[b] = mdout(theseids)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids)
+            pm, notpm = id2pmid(theseids) # ids added to bib
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
     for b in p:
         thesepmids, theseothers = parse_pmid_block(b)
-        theseids, notfound = pmid2id(thesepmids, theseothers)
+        theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
         if outputstyle == 'md':
             replacedict[b] = mdout(theseids, notfound)
         elif outputstyle=='tex':
@@ -491,7 +489,7 @@ def replace_blocks(thistext, bd, outputstyle="md"):
         if outputstyle=='pmid':
             replacedict[b] = pmidout([pmid],[])
         else:
-            theseids, notfound = pmid2id(thesepmids, theseothers)
+            theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
             if outputstyle == 'md':
                 replacedict[b] = mdout(theseids, notfound)
             elif outputstyle=='tex':

@@ -6,26 +6,15 @@ from bibtexparser.bibdatabase import BibDatabase
 import latexchars
 
 def init():
-    global db
+    global full_bibdat
+    full_bibdat = BibDatabase()
+    global db # cited 
     db = BibDatabase()
     global pmids
     pmids = {}
-    global ids
-    ids = {}
-    global newcitations
-    newcitations = []
 
-def make_dictionaries(bib_db):
-    for entry in bib_db:
-        # biblatex id dict
-        try:
-            ids[entry['ID']]
-            print("duplicate ID in biblatex database:{}".format(entry["ID"]))
-            if 'pmid' in entry:
-                # replace this entry with a new one that has a PMID
-                ids[entry['ID']]=entry
-        except:
-            ids[entry['ID']]=entry
+def make_dictionaries():
+    for entry in full_bibdat.entries:
         # pmid id dict
         try:
             entry["pmid"]
@@ -40,7 +29,7 @@ def make_dictionaries(bib_db):
 
 def new(entry):
     '''
-        add new reference to pmids, ids and bib db
+        add new reference to pmids, db.entries_dict and bib db
     '''
     if entry is not None:
         try:
@@ -48,12 +37,11 @@ def new(entry):
         except:
             entry['ENTRYTYPE'] = 'article'
         try:
-            ids[entry['ID']]
+            db.entries_dict[entry['ID']]
         except:
             entry = latexchars.cleanbib(entry)
             db.entries = [entry] + db.entries
-            ids[entry['ID']] = entry
-            newcitations.append(entry['ID'])
+            print ("testing", db.entries_dict[entry['ID']])
             try:
                 entry["pmid"]
             except:
@@ -65,9 +53,10 @@ def new(entry):
 
 
 def supplement(theseids):
+    print (theseids)
     for thisid in theseids:
         try:
-            ids[thisid]
+            db.entries_dict[thisid]
         except:
             continue
         db.entries = [ids[thisid]] + db.entries

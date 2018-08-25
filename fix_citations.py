@@ -34,6 +34,8 @@ from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 #-------------------
+import bib
+bib.init() 
 import citefunctions
 config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
 #-------------------
@@ -51,6 +53,10 @@ parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['
 parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
 parser.add_argument('-i', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
 args = parser.parse_args()
+#-------------------
+args.bibfile = os.path.expanduser(args.bibfile)
+args.updatebibfile = os.path.expanduser(args.updatebibfile)
+args.filepath = os.path.expanduser(args.filepath)
 #-------------------
 print(args.filepath)
 filetype = "unknown filetype"
@@ -88,19 +94,23 @@ text = citefunctions.make_unicode(text)
 print ("read input file")
 #-------------------
 bibdat = citefunctions.read_bib_file(args.bibfile)
+bib.make_dictionaries(bibdat.entries)
 #-------------------
-# make dictionaries
-pmids, ids = citefunctions.make_dictionaries(bibdat.entries)
+
+'''
 #-------------------
 # find all citations
 idcitations = citefunctions.get_all_id_citations(text)
 pmidcitations = citefunctions.get_all_pmid_citations(text)
-print(idcitations)
-print(pmidcitations)
+latexcitations = citefunctions.get_latex_citation_blocks(text)
+othercitations = citefunctions.get_wholereference_citation_blocks(text)
 #-------------------
 # make new output database
-db = BibDatabase()
-for thisid in idcitations:
+#-------------------
+update = BibDatabase()
+pmids_to_add_to_inputdb = []
+# search through all the cited papers in this file and add them to the db 
+for thisid in [idcitations+latexcitations]:
     print(thisid)
     try:
         ids[thisid]
@@ -109,10 +119,7 @@ for thisid in idcitations:
         print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
         continue
     citefunctions.bibadd(db,ids[thisid])
-#-------------------
-# search through all the cited papers in this file and add them to the db 
-update = BibDatabase()
-pmids_to_add_to_inputdb = []
+
 for thispmid in pmidcitations:
     try:
         # always look in the existing bib db first
@@ -130,20 +137,25 @@ for thispmid in pmidcitations:
             print ("PMID:{} NOT FOUND ON PUBMED".format(thispmid))
             continue
     citefunctions.bibadd(db,pmids[thispmid])
+
+for thispmid in othercitations:
+    citefunctions.bibadd(update,othercitations[thispmid])
+'''
+
 #-----------------
 # replace the ids in the text with the outputstyle
-text = citefunctions.replace_blocks(text, pmids, ids, args.outputstyle)
+text = citefunctions.replace_blocks(text, bibdat, args.outputstyle)
 #-----------------
 # save remote bibliography
 with open(bibout, 'w') as bf:
-    bibtexparser.dump(db, bf)
-# save update bibliography
-with open(args.updatebibfile, 'w') as bf:
-    bibtexparser.dump(update, bf)
-if len(pmids_to_add_to_inputdb)>0:
+    bibtexparser.dump(bib.db, bf)
+#-----------------
+'''
+if len(bib.newpmids)>0:
     print ("\nURL for batch import to reference manager [CMD+dbl_click]:")
     print ("https://www.ncbi.nlm.nih.gov/pubmed/?term={}\n".format\
         ('&term='.join(["{}[pmid]".format(x) for x in pmids_to_add_to_inputdb])))
+'''
 #-----------------
 if args.customreplace:
     text = citefunctions.findreplace(text, config['custom_find_replace'])

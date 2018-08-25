@@ -22,6 +22,8 @@ from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 import latexchars
 #-------------
+import bib
+#-------------
 def getconfig(cfgfile):
     with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
@@ -39,6 +41,13 @@ markdown_labels_to_ignore = [
     '@fig:','@sec:','@tbl:','@eq:',
     '#fig:','#sec:','#tbl:','#eq:'
     ]
+#-------------
+#regexes
+squarebrackets = '\[[\s\S]+?\]'
+curlybrackets = '\{[\s\S]+?\}'
+roundbrackets = '\([\s\S]+?\)'
+latexbrackets = '\\\cite\{[\s\S]+?\}'
+
 #-------------
 def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
@@ -83,8 +92,23 @@ def sort_db(thisdb, sortby="year"):
         except:
             pass
         sorter[this_entry['ID']] = s
-    ids = [key for key, value in sorted(iter(sorter.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)]
-    thisdb.entries = [thisdb.entries_dict[thisid] for thisid in ids]
+    theseids = [key for key, value in sorted(iter(sorter.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)]
+    thisdb.entries = [thisdb.entries_dict[thisid] for thisid in theseids]
+
+def bibadd(thisdb, thisentry):
+    '''
+        add new reference at START of entries
+    '''
+    if thisentry is not None:
+        try:
+            thisentry['ENTRYTYPE']
+        except:
+            thisentry['ENTRYTYPE'] = 'article'
+        try:
+            thisdb[thisentry]
+        except:
+            thisentry = latexchars.cleanbib(thisentry)
+            thisdb.entries = [thisentry] + thisdb.entries
 
 #-------------
 def findreplace(inputtext, frdict):
@@ -125,33 +149,6 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     return '---\n{}\n...\n{}'.format('\n'.join(header), remainder)
 
 #-------------
-def make_dictionaries(bib_db):
-    pmids = {}
-    ids = {}
-    for entry in bib_db:
-        # biblatex id dict
-        try:
-            ids[entry['ID']]
-            print("duplicate ID in biblatex database:{}".format(entry["ID"]))
-            if 'pmid' in entry:
-                # replace this entry with a new one that has a PMID
-                ids[entry['ID']]=entry
-        except:
-            ids[entry['ID']]=entry
-        # pmid id dict
-        try:
-            entry["pmid"]
-        except:
-            continue
-        try:
-            pmids[entry["pmid"]]
-            print("duplicate PMID in biblatex database:{}".format(entry["pmid"]))
-        except:
-            pass
-        pmids[entry["pmid"]] = entry
-    return pmids, ids
-
-#-------------
 
 def flatten(thislist):
     listcount = [1 for x in thislist if type(x)==type([])]
@@ -167,7 +164,7 @@ def make_unicode(inputstring):
     else:
         return inputstring
 
-def get_parethesised(thistext,parentheses=['\[.+?\]', '\{.+?\}']):
+def get_parethesised(thistext,parentheses=[squarebrackets, curlybrackets]):
     if type(parentheses)!=type([]):
         print ("Error, parentheses must be in a list")
     outlist = []
@@ -190,6 +187,10 @@ def get_parethesised(thistext,parentheses=['\[.+?\]', '\{.+?\}']):
     return nested_out
 
 def remove_parentheses(thistext):
+    '''
+        remove matched parentheses at both ends
+        and remove newlines
+    '''
     thistext = thistext.strip()
     for opener in ('(','[','{','\\cite{'):
         if thistext.startswith(opener):
@@ -197,14 +198,16 @@ def remove_parentheses(thistext):
     for closer in (')','}',']'):
         if thistext.endswith(closer):
             thistext = thistext[:-1]
+    thistext = thistext.replace('\n',' ')
+    thistext = thistext.replace('\r',' ')
     return thistext
 
 def get_latex_citation_blocks(inputtext):
-    return get_parethesised(inputtext, ['\\\cite\{.+?\}'])
+    return get_parethesised(inputtext, [latexbrackets])
 
 def get_md_citation_blocks(inputtext):
     confirmed_blocks = []
-    for b in get_parethesised(inputtext, ['\[.+?\]']):
+    for b in get_parethesised(inputtext, [squarebrackets]):
         if "@" in b:
             confirmed = True
             for crossreflabel in markdown_labels_to_ignore:
@@ -216,7 +219,7 @@ def get_md_citation_blocks(inputtext):
 
 def get_pmid_citation_blocks(inputtext):
     confirmed_blocks = []
-    for theseparetheses in ['\[.+?\]', '\{.+?\}', '\(.+?\)']:
+    for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
         for b in get_parethesised(inputtext, [theseparetheses]):
             if "PMID" in b or "pmid" in b:
                 confirmed_blocks.append(b)
@@ -226,34 +229,32 @@ def get_pmid_citation_blocks(inputtext):
     return confirmed_blocks
 
 def get_wholereference_citation_blocks(inputtext):
+    '''
+        finds wholecitations AND doi 
+        return a dict of form {pmid:bibtexentry, }
+    '''
     confirmed_blocks = {}
-    for theseparetheses in ['\[.+?\]', '\{.+?\}']:
+    for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parethesised(inputtext, [theseparetheses]):
             if "." in b or ":" in b:
                 if "@" not in b and "PMID" not in b and "pmid" not in b and "#" not in b:
-                    # try searching for the whole ref
-                    pub = search_pubmed(b)
-                    if len(pub) != 1:
-                        # try searching just for the title (the longest sentence in the ref)
-                        lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
-                        title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
-                        pub = search_pubmed(title, "title")
-                    if len(pub) == 1:
-                        pmid = pub[0]
-                        p = p2b(pmid)
-                        if len(p) > 0:
-                            p = p[0]
-                            q = input ("--------------\n\
-Reference block (PMID:{}) found. \
-Please check that input:\n\n{}\n\n\
-Is the same as the found citation:\n{}\n\n\
-Enter y/n\
-                                ".format(pmid, b, '\n'.join( ["{:>12}:    {}".format(x,p[x]) for x in p]) ))
-                            q = q.strip().upper()
-                            if q == "Y":
-                                print ('--confirmed--')
-                                confirmed_blocks[pmid] = b
-                                inputtext = inputtext.replace(b, '---citationblockremoved---')
+                    if "doi:" in b or "DOI:" in b:
+                        d = remove_parentheses(b).replace("DOI:","doi:")
+                        d = [x for x in d.split(' ') if x.startswith('doi:')][0]
+                        d = d.replace("doi:","")
+                        new_entry = findcitation(d, 'doi')
+                        if new_entry is not None:
+                            pmid = new_entry['pmid']
+                            confirmed_blocks[pmid] = str(b)
+                            inputtext = inputtext.replace(b, '---citationblockremoved---')
+                            continue
+                    lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
+                    title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
+                    new_entry = findcitation(title, 'title', additionalinfo=b)
+                    if new_entry is not None:
+                        pmid = new_entry['pmid']
+                        confirmed_blocks[pmid] = str(b)
+                        inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks
 
 def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
@@ -286,7 +287,9 @@ def parse_id_block(thisblock):
     thisblock = remove_parentheses(thisblock)
     pth = split_by_delimiter(thisblock)
     pth = [x.replace("@","") for x in pth if x.startswith('@')]
-    return list(set(pth)), []
+    theseids = list(set(pth))
+    bib.supplement(theseids)
+    return theseids, []
 
 def parse_pmid_block(thisblock):
     thisblock = remove_parentheses(thisblock)
@@ -318,47 +321,103 @@ def parse_pmid_block(thisblock):
 
 #------------
 
-def id2pmid(theseids, id_db):
+def findcitation(info, infotype='pmid', additionalinfo='', ):
+    '''
+        search online in a variety of ways
+        return a single bibtex entry
+        or None if not found or in doubt
+    '''
+    if infotype == 'pmid':
+        pub = p2b([str(info)])
+        if len(pub) > 0:
+            if pub[0] != 'null' and pub[0] != None:
+                print ("PMID:{} found online".format(info))
+                bib.new(pub[0])
+                return pub[0]
+        print ("PMID:{} NOT FOUND ON PUBMED".format(info))
+        return None
+    elif infotype == 'doi':
+        pub = search_pubmed(info, "doi")
+        if len(pub) == 1:
+            pubent = p2b(pub[0])
+            if len(pubent) > 0:
+                if pubent[0] != 'null' and pubent[0] != None:
+                    bib.new(pubent[0])
+                    return pubent[0]
+        return None
+    elif infotype == 'title':
+        if additionalinfo == '':
+            additionalinfo = title
+        pub = search_pubmed(info, "title")
+        if len(pub) == 1:
+            pmid = pub[0]
+            pubent = p2b(pmid)
+            if len(pubent) > 0:
+                if pubent[0] != 'null' and pubent[0] != None:
+                    q = input ("--------------\n\
+Reference block (PMID:{}) found. \
+Please check that input:\n\n{}\n\n\
+Is the same as the found citation:\n{}\n\n\
+Enter y/n\
+                        ".format(pmid, additionalinfo, '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0]]) ))
+                    q = q.strip().upper()
+                    if q == "Y":
+                        print ('--confirmed--')
+                        bib.new(pubent[0])
+                        return pubent[0]
+        return None
+
+
+def id2pmid(theseids):
     pmidlist = []
     notpmidlist = []
     for thisid in theseids:
-        if thisid.startswith("PMID:"):
-            pmidlist.append(thisid)
-        if 'PMID' in id_db[thisid]:
-            pmidlist.append(id_db[thisid]['PMID'])
-        elif 'pmid' in id_db[thisid]:
-            pmidlist.append(id_db[thisid]['pmid'])
+        # try to find this id
+        try:
+            bib.ids[thisid]
+        except:
+            bestmatchingkey = citefunctions.find_similar_keys(thisid, bib.ids)
+            print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
+            continue
+        # if it is found, try to get the pmid
+        if 'PMID' in bib.ids[thisid]:
+            pmidlist.append(ids[thisid]['PMID'])
+        elif 'pmid' in bib.ids[thisid]:
+            pmidlist.append(ids[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
-            pub = search_pubmed(id_db[thisid]['doi'], "doi")
-            if len(pub) == 1:
-                pmid = pub[0]
-                pmidlist.append(pmid)
-                id_db[thisid]['PMID'] = pmid
-            else:
-                pub = search_pubmed(id_db[thisid]['title'], "title")
-                if len(pub) == 1:
-                    pmid = pub[0]
-                    p = p2b(pmid)
-                    print ("maybe rescued? Not included as this code not written yet...")
-                    print (p)
-                notpmidlist.append(thisid)
-                continue
+            new_entry = findcitation(ids[thisid]['doi'], 'doi')
+            if new_entry is None:
+                new_entry = findcitation(ids[thisid]['title'], 'title')
+                if new_entry is None:
+                    notpmidlist.append(thisid)
+                    continue
+            pmidlist.append(new_entry['pmid'])
+            bib.pmids[new_entry['pmid']] = new_entry
+
     return pmidlist, notpmidlist
 
-def pmid2id(thesepmids, others, pmid_db, id_db):
+def pmid2id(thesepmids, others):
     outids = []
     missing_ids = others
     for pmid in thesepmids:
         try:
-            outids.append(pmid_db[pmid]['ID'])
+            outids.append(bib.pmids[pmid]['ID'])
         except:
             try: 
-                id_db[pmid] # if no error, this is an id, not a pmid
+                bib.ids[pmid] # if no error, this is an id, not a pmid
                 outids.append(pmid)
             except:
-                missing_ids.append(pmid)
+                new_entry = findcitation(pmid, 'pmid')
+                if new_entry is not None:
+                    outids.append(new_entry['ID'])
+                    bib.new(new_entry)
+                else:
+                    missing_ids.append(pmid)
     return outids, missing_ids
+
+#------------
+
 
 def pmidout(pmidlist, notpmidlist):
     blockstring = ''
@@ -390,20 +449,20 @@ def mdout(theseids, thesemissing=[]):
         blockstring = 'null'
     return blockstring
 
-def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
+def replace_blocks(thistext, bd, outputstyle="md"):
     # pmid first as they are the most likely to have errors
     p = get_pmid_citation_blocks(thistext)
     l = [x for x in get_latex_citation_blocks(thistext) if x not in p]
     m = [x for x in get_md_citation_blocks(thistext) if x not in p and x not in l]
     wr = get_wholereference_citation_blocks(thistext) # dict because only found articles included
-    r = {x:wr[x] for x in wr if wr[x] not in p and wr[x] not in l and wr[x] not in m}
+    r = {x:wr[x] for x in wr if wr[x] not in p+l+m}
     replacedict = {}
     for b in m:
         theseids = parse_id_block(b)[0]
         if outputstyle=='tex':
             replacedict[b] = texout(theseids)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids, id_db)
+            pm, notpm = id2pmid(theseids)
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
@@ -412,13 +471,13 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
         if outputstyle=='md':
             replacedict[b] = mdout(theseids)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids, id_db)
+            pm, notpm = id2pmid(theseids)
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
     for b in p:
         thesepmids, theseothers = parse_pmid_block(b)
-        theseids, notfound = pmid2id(thesepmids, theseothers, pmid_db, id_db)
+        theseids, notfound = pmid2id(thesepmids, theseothers)
         if outputstyle == 'md':
             replacedict[b] = mdout(theseids, notfound)
         elif outputstyle=='tex':
@@ -432,7 +491,7 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
         if outputstyle=='pmid':
             replacedict[b] = pmidout([pmid],[])
         else:
-            theseids, notfound = pmid2id(thesepmids, theseothers, pmid_db, id_db)
+            theseids, notfound = pmid2id(thesepmids, theseothers)
             if outputstyle == 'md':
                 replacedict[b] = mdout(theseids, notfound)
             elif outputstyle=='tex':
@@ -448,21 +507,6 @@ def replace_blocks(thistext, pmid_db, id_db, outputstyle="md"):
     return thistext
 
 #-----------------
-
-def bibadd(thisdb, thisentry):
-    '''
-        add new reference at START of entries
-    '''
-    if thisentry is not None:
-        try:
-            thisentry['ENTRYTYPE']
-        except:
-            thisentry['ENTRYTYPE'] = 'article'
-        try:
-            thisdb[thisentry]
-        except:
-            thisentry = latexchars.cleanbib(thisentry)
-            thisdb.entries = [thisentry] + thisdb.entries
 
 def find_similar_keys(this_string, thisdict):
     '''
@@ -508,15 +552,15 @@ def get_doi_from_pmid(pmid):
 # --------------------
 # by Nick Loman
 
-def p2b(pmids):
+def p2b(pmidlist):
     ''' by Nick Loman '''
 
-    if type(pmids) != list:
-        pmids = [pmids]
+    if type(pmidlist) != list:
+        pmidlist = [pmidlist]
 
     ## Fetch XML data from Entrez.
     efetch = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
-    url = '{}?db=pubmed&id={}&rettype=abstract'.format(efetch, ','.join(pmids))
+    url = '{}?db=pubmed&id={}&rettype=abstract'.format(efetch, ','.join(pmidlist))
     r = requests.get(url)
     ##print(r.text) # to examine the returned xml
 
@@ -537,8 +581,8 @@ def p2b(pmids):
         # jkb additions
         PMCID = None
         DOI = None
-        ids = PubmedArticle.findall('./PubmedData/ArticleIdList/ArticleId')
-        for thisid in ids:
+        theseids = PubmedArticle.findall('./PubmedData/ArticleIdList/ArticleId')
+        for thisid in theseids:
             if thisid.attrib['IdType'] == 'pmc':
                 PMCID = thisid
             elif thisid.attrib['IdType'] == 'doi':
@@ -615,7 +659,8 @@ def p2b(pmids):
             bib["pmcid"] = PMCID.text
         if DOI is not None:
             bib["doi"] = DOI.text
-        bib["ISSN"] = ISSN.text
+        if ISSN is not None:
+            bib["ISSN"] = ISSN.text
         bib["pmid"] = PMID.text
 
         bibout.append(bib)

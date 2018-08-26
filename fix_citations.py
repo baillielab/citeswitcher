@@ -94,7 +94,7 @@ text = citefunctions.make_unicode(text)
 print ("read input file")
 #-------------------
 bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
-bib.make_dictionaries()
+bib.make_pmid_dict()
 #-----------------
 # replace the ids in the text with the outputstyle
 text = citefunctions.replace_blocks(text, args.outputstyle)

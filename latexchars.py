@@ -2990,6 +2990,7 @@ def replace_accents(thistext, mode="biblatex"):
 def cleanbib(bibtex_entry):
     return {d:replace_accents(bibtex_entry[d]) for d in bibtex_entry.keys()}
 
+#from bibtexparser.latexenc import string_to_latex
 
 
 

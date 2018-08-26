@@ -20,6 +20,7 @@ import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
+from bibtexparser.latexenc import latex_to_unicode
 import latexchars
 #-------------
 import bib
@@ -94,21 +95,6 @@ def sort_db(thisdb, sortby="year"):
         sorter[this_entry['ID']] = s
     theseids = [key for key, value in sorted(iter(sorter.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)]
     thisdb.entries = [thisdb.entries_dict[thisid] for thisid in theseids]
-
-def bibadd(thisdb, thisentry):
-    '''
-        add new reference at START of entries
-    '''
-    if thisentry is not None:
-        try:
-            thisentry['ENTRYTYPE']
-        except:
-            thisentry['ENTRYTYPE'] = 'article'
-        try:
-            thisdb[thisentry]
-        except:
-            thisentry = latexchars.cleanbib(thisentry)
-            thisdb.entries = [thisentry] + thisdb.entries
 
 #-------------
 def findreplace(inputtext, frdict):
@@ -372,17 +358,17 @@ def id2pmid(theseids):
     pmidlist = []
     notpmidlist = []
     for thisid in theseids:
-        # try to find this id
+        # try to find this id in full_bibdat 
         try:
-            full_bibdat.entries[thisid]
+            bib.full_bibdat.entries[thisid]
         except:
-            bestmatchingkey = citefunctions.find_similar_keys(thisid, full_bibdat.entries)
+            bestmatchingkey = citefunctions.find_similar_keys(thisid, bib.full_bibdat.entries)
             print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
             continue
         # if it is found, try to get the pmid
-        if 'PMID' in full_bibdat.entries[thisid]:
+        if 'PMID' in bib.full_bibdat.entries[thisid]:
             pmidlist.append(ids[thisid]['PMID'])
-        elif 'pmid' in full_bibdat.entries[thisid]:
+        elif 'pmid' in bib.full_bibdat.entries[thisid]:
             pmidlist.append(ids[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
@@ -394,7 +380,6 @@ def id2pmid(theseids):
                     continue
             pmidlist.append(new_entry['pmid'])
             bib.pmids[new_entry['pmid']] = new_entry
-
     return pmidlist, notpmidlist
 
 def pmid2id(thesepmids, others):
@@ -402,8 +387,9 @@ def pmid2id(thesepmids, others):
     missing_ids = others
     for pmid in thesepmids:
         try:
+            print ('1', bib.pmids[pmid])
             outids.append(bib.pmids[pmid]['ID'])
-            bib.supplement(bib.pmids[pmid]['ID'])
+            bib.supplement([bib.pmids[pmid]['ID']])
         except:
             new_entry = findcitation(pmid, 'pmid')
             if new_entry is not None:
@@ -638,8 +624,7 @@ def p2b(pmidlist):
             titlestring = "PMID{}_".format(PMID.text)
         new_id = '{}{}{}'.format(authorname, titlestring, Year)
         new_id = re.sub(r'\W+', '', new_id)
-        new_id = latexchars.replace_accents(new_id, mode="biblatex")
-        bib["ID"] = new_id
+        bib["ID"] = latexchars.replace_accents(new_id)
         bib["Author"] = ' and '.join(authors)
         bib["Title"] = ArticleTitle.text
         bib["Journal"] = Title.text
@@ -660,7 +645,8 @@ def p2b(pmidlist):
         if ISSN is not None:
             bib["ISSN"] = ISSN.text
         bib["pmid"] = PMID.text
-
+        # always return clean latex 
+        bib = {d:latex_to_unicode(bib[d]) for d in bib.keys()}
         bibout.append(bib)
     return bibout
 

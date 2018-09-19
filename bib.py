@@ -52,12 +52,11 @@ def new(entry):
                 pmids[entry["pmid"]] = entry
 
 def supplement(theseids):
-    print ("supp:", theseids)
+    #print ("supp:", theseids)
     for thisid in theseids:
         try:
             full_bibdat.entries_dict[thisid]
         except:
-            print ("s2 fail - id not in dict {}".format(thisid))
             continue
         db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
         db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]

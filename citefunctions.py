@@ -220,6 +220,7 @@ def get_wholereference_citation_blocks(inputtext):
         return a dict of form {pmid:bibtexentry, }
     '''
     confirmed_blocks = {}
+    askedalready = {}
     for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parethesised(inputtext, [theseparetheses]):
             if "." in b or ":" in b:
@@ -234,13 +235,17 @@ def get_wholereference_citation_blocks(inputtext):
                             confirmed_blocks[pmid] = str(b)
                             inputtext = inputtext.replace(b, '---citationblockremoved---')
                             continue
-                    lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
-                    title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
-                    new_entry = findcitation(title, 'title', additionalinfo=b)
+                    try:
+                        new_entry = askedalready[b.replace('\n',' ')]
+                    except:
+                        lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
+                        title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
+                        new_entry = findcitation(title, 'title', additionalinfo=b)
                     if new_entry is not None:
                         pmid = new_entry['pmid']
                         confirmed_blocks[pmid] = str(b)
                         inputtext = inputtext.replace(b, '---citationblockremoved---')
+                        askedalready[b.replace('\n',' ')] = new_entry
     return confirmed_blocks
 
 def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
@@ -323,6 +328,7 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
         print ("PMID:{} NOT FOUND ON PUBMED".format(info))
         return None
     elif infotype == 'doi':
+        print ("this is a doi: {}".format(info))
         pub = search_pubmed(info, "doi")
         if len(pub) == 1:
             pubent = p2b(pub[0])
@@ -360,15 +366,15 @@ def id2pmid(theseids):
     for thisid in theseids:
         # try to find this id in full_bibdat 
         try:
-            bib.full_bibdat.entries[thisid]
+            bib.full_bibdat.entries_dict[thisid]
         except:
-            bestmatchingkey = citefunctions.find_similar_keys(thisid, bib.full_bibdat.entries)
+            bestmatchingkey = find_similar_keys(thisid, bib.full_bibdat.entries_dict)
             print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
             continue
         # if it is found, try to get the pmid
-        if 'PMID' in bib.full_bibdat.entries[thisid]:
+        if 'PMID' in bib.full_bibdat.entries_dict[thisid]:
             pmidlist.append(ids[thisid]['PMID'])
-        elif 'pmid' in bib.full_bibdat.entries[thisid]:
+        elif 'pmid' in bib.full_bibdat.entries_dict[thisid]:
             pmidlist.append(ids[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
@@ -387,7 +393,6 @@ def pmid2id(thesepmids, others):
     missing_ids = others
     for pmid in thesepmids:
         try:
-            print ('1', bib.pmids[pmid])
             outids.append(bib.pmids[pmid]['ID'])
             bib.supplement([bib.pmids[pmid]['ID']])
         except:
@@ -509,6 +514,8 @@ def find_similar_keys(this_string, thisdict):
 
 def search_pubmed(search_string, restrictfields=""):
     '''return a list of pmids for articles found by a search string'''
+    if len(search_string.strip())==0:
+        return []
     max_returns = 500
     days = "all"
     handle = Entrez.esearch(db="pubmed", term=search_string, retmax=max_returns, rettype="medline", field=restrictfields)

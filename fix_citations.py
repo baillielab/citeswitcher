@@ -92,7 +92,7 @@ elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
 if args.include:
     import include
     lines = include.parse_includes(args.filepath)
-    text = '\n'.join(lines)
+    text = ''.join(lines)
 else:
     with io.open(args.filepath, "r", encoding="utf-8") as f:
         text = f.read()

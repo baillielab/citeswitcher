@@ -46,12 +46,13 @@ parser.add_argument('-f', '--filepath',    help='filepath', default=config['test
 parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
 # - optional
 parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
+parser.add_argument('-i', '--include', action="store_true", default=False, help='include files')
 parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
 parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
 parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
-parser.add_argument('-i', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
+parser.add_argument('-img', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
 args = parser.parse_args()
 #-------------------
 args.bibfile = os.path.expanduser(args.bibfile)
@@ -88,10 +89,16 @@ elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
     outputfile = os.path.join(outpath, filestem+".citetex."+filetype)
 #-------------------
 # read input file
-with io.open(args.filepath, "r", encoding="utf-8") as my_file:
-     text = my_file.read()
+if args.include:
+    import include
+    lines = include.parse_includes(args.filepath)
+    text = '\n'.join(lines)
+else:
+    with io.open(args.filepath, "r", encoding="utf-8") as f:
+        text = f.read()
 text = citefunctions.make_unicode(text)
 print ("read input file")
+#-------------------
 #-------------------
 bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
 bib.make_pmid_dict()

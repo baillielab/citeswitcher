@@ -1,0 +1,98 @@
+﻿#!/opt/local/bin/python
+# -*- coding: UTF-8 -*-
+
+import io
+import os
+#-----------------------------
+'''
+RULES:
+INCLUDESECTION IN LINE
+#INCLUDESECTION NOT IN LINE
+WHOLE LINE IS REPLACED
+FILENAME IS NEXT WORD AFTER INCLUDESECTION
+'''
+#-----------------------------
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+#-----------------------------
+class cd:
+    """Context manager for changing the current working directory"""
+    """ by Brian M. Hunt https://stackoverflow.com/users/19212/brian-m-hunt"""
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
+def newext(filepath, thisext):
+    return filepath[:filepath.rfind('.')] + thisext
+
+def preext(filepath, thisext):
+    lastdot = filepath.rfind('.')
+    outlist = [filepath[:lastdot], thisext, filepath[lastdot+1:]]
+    return ".".join(outlist)
+
+def get_include(thisline):
+    if "INCLUDESECTION" in thisline and not "#INCLUDESECTION" in thisline:
+        x = thisline.split(' ')
+        return x[x.index("INCLUDESECTION")+1].strip()
+
+def parse_includes(thisfile):
+    '''
+        read file and return lines with includes
+    '''
+    with io.open(thisfile, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    filedir = os.path.split(os.path.abspath(thisfile))[0]
+    with cd(filedir):
+        additionalfiles = [get_include(x) for x in lines]
+        additionalfiles = list(set([x for x in additionalfiles if x != None]))
+        print ("Adding", additionalfiles)
+        for filepath in additionalfiles:
+            if os.path.exists(filepath):
+                with open(filepath) as f:
+                    text = f.read()
+            else:
+                print ("\n\n*** INCLUDE FILE NOT FOUND: {} ***\n\n".format(filepath))
+                continue
+            for i,line in enumerate(lines):
+                if get_include(line) == filepath:
+                    lines[i] = text
+        return lines
+
+def save_new(thisfile, outputfile="auto"):
+    lines = parse_includes(thisfile)
+    if outputfile == 'auto':
+        outputfile = preext(thisfile, 'inc')
+    with open(outputfile,'w') as o:
+        o.write(''.join(lines))
+    return outputfile
+
+#-----------------------------
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--filename', default=None,   help='filename')
+    args = parser.parse_args()
+    save_new(args.filename)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

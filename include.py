@@ -38,7 +38,7 @@ def preext(filepath, thisext):
 def get_include(thisline):
     if "INCLUDESECTION" in thisline and not "#INCLUDESECTION" in thisline:
         x = thisline.split(' ')
-        return x[x.index("INCLUDESECTION")+1].strip()
+        return x[x.index("INCLUDESECTION")+1].strip().replace("'",'').replace('"','')
 
 def parse_includes(thisfile):
     '''
@@ -50,11 +50,13 @@ def parse_includes(thisfile):
     with cd(filedir):
         additionalfiles = [get_include(x) for x in lines]
         additionalfiles = list(set([x for x in additionalfiles if x != None]))
+        print ("working in: {}".format(filedir))
         print ("Adding", additionalfiles)
         for filepath in additionalfiles:
+            filepath = os.path.normpath(filepath)
             if os.path.exists(filepath):
-                with open(filepath) as f:
-                    text = f.read()
+                newlines = parse_includes(filepath)
+                text = ''.join(newlines)
             else:
                 print ("\n\n*** INCLUDE FILE NOT FOUND: {} ***\n\n".format(filepath))
                 continue

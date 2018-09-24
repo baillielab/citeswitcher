@@ -40,7 +40,7 @@ def get_include(thisline):
         x = thisline.split(' ')
         return x[x.index("INCLUDESECTION")+1].strip().replace("'",'').replace('"','')
 
-def parse_includes(thisfile):
+def parse_includes(thisfile, verbose=False):
     '''
         read file and return lines with includes
     '''
@@ -50,8 +50,9 @@ def parse_includes(thisfile):
     with cd(filedir):
         additionalfiles = [get_include(x) for x in lines]
         additionalfiles = list(set([x for x in additionalfiles if x != None]))
-        print ("working in: {}".format(filedir))
-        print ("Adding", additionalfiles)
+        if verbose:
+            print ("working in: {}".format(filedir))
+            print ("Adding", additionalfiles)
         for filepath in additionalfiles:
             filepath = os.path.normpath(filepath)
             if os.path.exists(filepath):

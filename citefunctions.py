@@ -227,6 +227,9 @@ def get_wholereference_citation_blocks(inputtext):
                 if "@" not in b and "PMID" not in b and "pmid" not in b and "#" not in b:
                     if "doi:" in b or "DOI:" in b:
                         d = remove_parentheses(b).replace("DOI:","doi:")
+                        d = d.replace("doi: ", "doi:")
+                        d = d.replace("https://doi.org/", "")
+                        d = d.replace("http://doi.org/", "")
                         d = [x for x in d.split(' ') if x.startswith('doi:')][0]
                         d = d.replace("doi:","")
                         new_entry = findcitation(d, 'doi')
@@ -405,7 +408,21 @@ def pmid2id(thesepmids, others):
     return outids, missing_ids
 
 #------------
+def format_inline(thisid):
+    au = bib.db.entries_dict[thisid]['Author'].split(" and ")
+    if len(au)>1:
+        au = au[0] + " et al"
+    else:
+        au = au[0]
 
+    formatted_citation = "{}. {} {};{}({})".format(
+        au,
+        bib.db.entries_dict[thisid]['Journal'],
+        bib.db.entries_dict[thisid]['Volume'],
+        bib.db.entries_dict[thisid]['Pages'],
+        bib.db.entries_dict[thisid]['Year'],
+        )
+    return formatted_citation
 
 def pmidout(pmidlist, notpmidlist):
     blockstring = ''
@@ -417,25 +434,23 @@ def pmidout(pmidlist, notpmidlist):
         blockstring = 'null'
     return blockstring
 
-def texout(theseids, thesemissing=[]):
+def mdout(theseids, thesemissing=[], outputstyle="md"):
     blockstring = ''
-    if len(theseids) > 0:
+    if len(theseids) == 0:
+        blockstring = 'null'
+    elif outputstyle == "md":
+        blockstring += "[{}]".format('; '.join(["@{}".format(x) for x in theseids]))
+        if len(thesemissing) > 0:
+            blockstring += "[***{}]".format(', '.join(thesemissing))
+    elif outputstyle == "tex":
         bib.supplement(theseids)
         blockstring += "\\cite\{{}\}".format(', '.join(theseids))
         if len(thesemissing) > 0:
             blockstring += "[**{}]".format(', '.join(thesemissing))
-    else:
-        blockstring = 'null'
-    return blockstring
-
-def mdout(theseids, thesemissing=[]):
-    blockstring = ''
-    if len(theseids) > 0:
-        blockstring += "[{}]".format('; '.join(["@{}".format(x) for x in theseids]))
+    elif outputstyle == "inline":
+        blockstring += "({})".format(', '.join([format_inline(x) for x in theseids]))
         if len(thesemissing) > 0:
             blockstring += "[***{}]".format(', '.join(thesemissing))
-    else:
-        blockstring = 'null'
     return blockstring
 
 def replace_blocks(thistext, outputstyle="md"):
@@ -448,8 +463,8 @@ def replace_blocks(thistext, outputstyle="md"):
     replacedict = {}
     for b in m:
         theseids = parse_id_block(b)[0]  # ids added to bib
-        if outputstyle=='tex':
-            replacedict[b] = texout(theseids)
+        if outputstyle=='tex' or outputstyle=='inline':
+            replacedict[b] = mdout(theseids, outputstyle)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
             replacedict[b] = pmidout(pm, notpm)
@@ -457,7 +472,7 @@ def replace_blocks(thistext, outputstyle="md"):
             continue
     for b in l:
         theseids = parse_id_block(b)[0]  # ids added to bib
-        if outputstyle=='md':
+        if outputstyle=='md' or outputstyle=='inline':
             replacedict[b] = mdout(theseids)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
@@ -467,10 +482,8 @@ def replace_blocks(thistext, outputstyle="md"):
     for b in p:
         thesepmids, theseothers = parse_pmid_block(b)
         theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
-        if outputstyle == 'md':
-            replacedict[b] = mdout(theseids, notfound)
-        elif outputstyle=='tex':
-            replacedict[b] = texout(theseids, notfound)
+        if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+            replacedict[b] = mdout(theseids, notfound, outputstyle)
         else:
             continue
     for pmid in r:
@@ -481,10 +494,8 @@ def replace_blocks(thistext, outputstyle="md"):
             replacedict[b] = pmidout([pmid],[])
         else:
             theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
-            if outputstyle == 'md':
-                replacedict[b] = mdout(theseids, notfound)
-            elif outputstyle=='tex':
-                replacedict[b] = texout(theseids, notfound)
+            if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+                replacedict[b] = mdout(theseids, notfound, outputstyle)
             else:
                 continue
     for b in replacedict:

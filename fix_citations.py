@@ -43,7 +43,7 @@ import argparse
 parser = argparse.ArgumentParser()
 # - essential
 parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
-parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid'], default='null', help='output references format')
+parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
 # - optional
 parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
 parser.add_argument('-i', '--include', action="store_true", default=False, help='include files')
@@ -87,6 +87,9 @@ elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
 elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
     print("outputstyle = tex")
     outputfile = os.path.join(outpath, filestem+".citetex."+filetype)
+elif args.outputstyle == 'inline':
+    print("outputstyle = inline")
+    outputfile = os.path.join(outpath, filestem+".citeinline."+filetype)
 #-------------------
 # read input file
 if args.include:
@@ -99,8 +102,10 @@ else:
 text = citefunctions.make_unicode(text)
 print ("read input file")
 #-------------------
-#-------------------
-bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
+try:
+    bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
+except:
+    pass # if bibfile not found or deliberately null, db remains blank.
 bib.make_pmid_dict()
 #-----------------
 # replace the ids in the text with the outputstyle

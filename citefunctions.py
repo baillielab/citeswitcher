@@ -415,12 +415,12 @@ def format_inline(thisid):
     else:
         au = au[0]
 
-    formatted_citation = "{}. {} {};{}({})".format(
+    formatted_citation = "{}. {} {};{}:{}".format(
         au,
-        bib.db.entries_dict[thisid]['Journal'],
+        bib.db.entries_dict[thisid]['Journal'].capitalize(),
+        bib.db.entries_dict[thisid]['Year'],
         bib.db.entries_dict[thisid]['Volume'],
         bib.db.entries_dict[thisid]['Pages'],
-        bib.db.entries_dict[thisid]['Year'],
         )
     return formatted_citation
 

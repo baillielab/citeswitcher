@@ -65,7 +65,7 @@ def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
 def callpandoc(f, out_ext, out_dir='', args=""):
-    cmd = 'pandoc {} --number-sections --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
+    cmd = 'pandoc {} --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
     print (cmd)
     subprocess.call(cmd, shell=True)
 
@@ -126,8 +126,10 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     headerkeys = [x.split(':')[0] for x in header]
     if 'title' not in headerkeys:
         header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
+    '''
     if 'date' not in headerkeys:
         header.append('date: \\today')
+    '''
     if 'bibliography' not in headerkeys:
         header.append('bibliography: {}'.format(bibtexfile))
     if 'csl' not in headerkeys and cslfilepath != 'null':
@@ -214,6 +216,21 @@ def get_pmid_citation_blocks(inputtext):
                 inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks
 
+def get_searchstring_from_wholecitation(wc):
+    '''
+        return the longest sentence that doesn't look like a list of authors or a citation
+    '''
+    authorsep = '[A-Z], [A-Z]' # regex for [capital, comma, space, capital]
+    lendict = {x:len(x) for x in remove_parentheses(wc).split('.')}
+    for x in sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True):
+        if len(x[0]) > 0:
+            authoriness = float(len(re.findall(authorsep, x[0]))/len(x[0]))
+            if authoriness < 0.02:
+                if ":" in x[0] and ";" in x[0]: # probably not a title
+                    continue
+                else:
+                    return x[0]
+
 def get_wholereference_citation_blocks(inputtext):
     '''
         finds wholecitations AND doi 
@@ -223,10 +240,12 @@ def get_wholereference_citation_blocks(inputtext):
     askedalready = {}
     for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parethesised(inputtext, [theseparetheses]):
+            print (b)
             if "." in b or ":" in b:
                 if "@" not in b and "PMID" not in b and "pmid" not in b and "#" not in b:
-                    if "doi:" in b or "DOI:" in b:
+                    if "doi:" in b or "DOI:" in b or "https://doi.org/" in b:
                         d = remove_parentheses(b).replace("DOI:","doi:")
+                        d = d.replace("https://doi.org/","doi:")
                         d = d.replace("doi: ", "doi:")
                         d = d.replace("https://doi.org/", "")
                         d = d.replace("http://doi.org/", "")
@@ -238,12 +257,15 @@ def get_wholereference_citation_blocks(inputtext):
                             confirmed_blocks[pmid] = str(b)
                             inputtext = inputtext.replace(b, '---citationblockremoved---')
                             continue
+                        else:
+                            print ("doi search failure:", d)
                     try:
                         new_entry = askedalready[b.replace('\n',' ')]
                     except:
-                        lendict = {x:len(x) for x in remove_parentheses(b).split('.')}
-                        title = sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)[0][0]
+                        title = get_searchstring_from_wholecitation(b)
+                        print ("searching:", title)
                         new_entry = findcitation(title, 'title', additionalinfo=b)
+                        print (title, new_entry)
                     if new_entry is not None:
                         pmid = new_entry['pmid']
                         confirmed_blocks[pmid] = str(b)
@@ -364,9 +386,13 @@ Enter y/n\
 
 
 def id2pmid(theseids):
+    '''
+        input is a list of ids
+    '''
     pmidlist = []
     notpmidlist = []
     for thisid in theseids:
+        print ("1:", thisid)
         # try to find this id in full_bibdat 
         try:
             bib.full_bibdat.entries_dict[thisid]
@@ -376,14 +402,18 @@ def id2pmid(theseids):
             continue
         # if it is found, try to get the pmid
         if 'PMID' in bib.full_bibdat.entries_dict[thisid]:
-            pmidlist.append(ids[thisid]['PMID'])
+            pmidlist.append(bib.full_bibdat.entries_dict[thisid]['PMID'])
         elif 'pmid' in bib.full_bibdat.entries_dict[thisid]:
-            pmidlist.append(ids[thisid]['pmid'])
+            pmidlist.append(bib.full_bibdat.entries_dict[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
-            new_entry = findcitation(ids[thisid]['doi'], 'doi')
+            try:
+                new_entry = findcitation(bib.full_bibdat.entries_dict[thisid]['doi'], 'doi')
+            except:
+                notpmidlist.append(thisid) # hack
+                new_entry = bib.full_bibdat.entries_dict[thisid]
             if new_entry is None:
-                new_entry = findcitation(ids[thisid]['title'], 'title')
+                new_entry = findcitation(bib.full_bibdat.entries_dict[thisid]['title'], 'title')
                 if new_entry is None:
                     notpmidlist.append(thisid)
                     continue

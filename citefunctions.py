@@ -104,8 +104,10 @@ def findreplace(inputtext, frdict):
 
 #-------------
 def readheader(filecontents):
-    '''
+    ''' 
         Read a valid markdown header
+        Input is full text of file
+        Returns list of header items + full text of remainder
     '''
     t = filecontents.strip()
     t = t.replace('\r','\n')
@@ -130,10 +132,12 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     if 'date' not in headerkeys:
         header.append('date: \\today')
     '''
-    if 'bibliography' not in headerkeys:
-        header.append('bibliography: {}'.format(bibtexfile))
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
+    if 'bibliography' not in headerkeys:
+        header.append('bibliography: {}'.format(bibtexfile))
+    else:
+        header[header.index([y for y in header if y.startswith("bibliography")][0])] = 'bibliography: {}'.format(bibtexfile)
     return '---\n{}\n...\n{}'.format('\n'.join(header), remainder)
 
 #-------------

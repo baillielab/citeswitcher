@@ -5,6 +5,8 @@
 from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import string_to_latex
 
+additionaldicts = []
+
 def init():
     global full_bibdat
     full_bibdat = BibDatabase()
@@ -14,14 +16,12 @@ def init():
     pmids = {}
     global dois
     dois = {}
+    additionaldicts.append((pmids, "pmid"))
+    additionaldicts.append((dois, "doi"))
 
 def make_alt_dicts():
-    thesedics = [
-            (pmids, "pmid"),
-            (dois, "doi"),
-        ]
     for entry in full_bibdat.entries:
-        for thisdict, thislabel in thesedics:
+        for thisdict, thislabel in additionaldicts:
             try:
                 entry[thislabel]
             except:
@@ -35,7 +35,7 @@ def make_alt_dicts():
 
 def new(entry):
     '''
-        add new reference to pmids, db.entries, db.entries_dict
+        add new reference to full_bibdat.entries, full_bibdat.entries_dict and all additionaldicts
     '''
     if entry is not None:
         try:
@@ -43,19 +43,20 @@ def new(entry):
         except:
             entry['ENTRYTYPE'] = 'article'
         try:
-            db.entries_dict[entry['ID']]
+            full_bibdat.entries_dict[entry['ID']] # existing full_bibdat entry ALWAYS takes precedence
         except:
             entry = cleanbib(entry)
-            db.entries = [entry] + db.entries
-            db.entries_dict[entry['ID']] = entry
+            full_bibdat.entries = [entry] + full_bibdat.entries
+            full_bibdat.entries_dict[entry['ID']] = entry
+        for thisdict, thislabel in additionaldicts:
             try:
-                entry["pmid"]
+                entry[thislabel]
             except:
-                return 0
+                continue
             try:
-                pmids[entry["pmid"]]
+                thisdict[entry[thislabel]]
             except:
-                pmids[entry["pmid"]] = entry
+                thisdict[entry[thislabel]] = entry
 
 def supplement(theseids):
     #print ("supp:", theseids)
@@ -70,6 +71,27 @@ def supplement(theseids):
 def cleanbib(bibtex_entry):
     return bibtex_entry # this function disabled as it may not be necessary now because p2b() always returns clean latex
     #return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
+
+def cite(theseids):
+    for thisid in theseids:
+        try:
+            db.entries_dict[thisid]
+        except:
+            db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
+            db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

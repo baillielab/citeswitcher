@@ -59,7 +59,7 @@ args.bibfile = os.path.expanduser(args.bibfile)
 args.updatebibfile = os.path.expanduser(args.updatebibfile)
 args.filepath = os.path.expanduser(args.filepath)
 #-------------------
-print(args.filepath)
+print("Filepath:", args.filepath)
 filetype = "unknown filetype"
 if args.filepath.endswith(".md") or args.filepath.endswith(".txt"):
     filetype="md"

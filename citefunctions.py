@@ -220,6 +220,15 @@ def get_pmid_citation_blocks(inputtext):
                 inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks
 
+def get_doi_citation_blocks(inputtext):
+    confirmed_blocks = []
+    for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
+        for b in get_parethesised(inputtext, [theseparetheses]):
+            if "doi:" in b or "DOI:" in b or "https://doi.org/" in b:
+                confirmed_blocks.append(b)
+                inputtext = inputtext.replace(b, '---citationblockremoved---')
+    return confirmed_blocks
+
 def get_searchstring_from_wholecitation(wc):
     '''
         return the longest sentence that doesn't look like a list of authors or a citation
@@ -238,43 +247,21 @@ def get_searchstring_from_wholecitation(wc):
 def get_wholereference_citation_blocks(inputtext):
     '''
         finds wholecitations AND doi 
-        return a dict of form {pmid:bibtexentry, }
+        return a list of citation blocks
     '''
-    confirmed_blocks = {}
+    confirmed_blocks = []
     askedalready = {}
     for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parethesised(inputtext, [theseparetheses]):
-            print (b)
             if "." in b or ":" in b:
-                if "@" not in b and "PMID" not in b and "pmid" not in b and "#" not in b:
-                    if "doi:" in b or "DOI:" in b or "https://doi.org/" in b:
-                        d = remove_parentheses(b).replace("DOI:","doi:")
-                        d = d.replace("https://doi.org/","doi:")
-                        d = d.replace("doi: ", "doi:")
-                        d = d.replace("https://doi.org/", "")
-                        d = d.replace("http://doi.org/", "")
-                        d = [x for x in d.split(' ') if x.startswith('doi:')][0]
-                        d = d.replace("doi:","")
-                        new_entry = findcitation(d, 'doi')
-                        if new_entry is not None:
-                            pmid = new_entry['pmid']
-                            confirmed_blocks[pmid] = str(b)
-                            inputtext = inputtext.replace(b, '---citationblockremoved---')
-                            continue
-                        else:
-                            print ("doi search failure:", d)
-                    try:
-                        new_entry = askedalready[b.replace('\n',' ')]
-                    except:
-                        title = get_searchstring_from_wholecitation(b)
-                        print ("searching:", title)
-                        new_entry = findcitation(title, 'title', additionalinfo=b)
-                        print (title, new_entry)
-                    if new_entry is not None:
-                        pmid = new_entry['pmid']
-                        confirmed_blocks[pmid] = str(b)
-                        inputtext = inputtext.replace(b, '---citationblockremoved---')
-                        askedalready[b.replace('\n',' ')] = new_entry
+                try:
+                    new_entry = askedalready[b.replace('\n',' ')]
+                except:
+                    new_entry = parse_wholecitation_block(b)
+                if new_entry is not None:
+                    confirmed_blocks.append(str(b))
+                    inputtext = inputtext.replace(b, '---citationblockremoved---')
+                    askedalready[b.replace('\n',' ')] = new_entry
     return confirmed_blocks
 
 def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
@@ -288,22 +275,8 @@ def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\
     thislist = [e.strip() for e in thislist if e!=""]
     return thislist
 
-def get_all_id_citations(inputtext, style='latex'):
-    pth = get_latex_citation_blocks(inputtext)
-    pth += get_md_citation_blocks(inputtext)
-    citationlist = []
-    for block in pth:
-        citationlist += parse_id_block(block)[0]
-    return list(set(citationlist))
-
-def get_all_pmid_citations(inputtext):
-    pth = get_pmid_citation_blocks(inputtext)
-    citationlist = []
-    for block in pth:
-        citationlist += parse_pmid_block(block)[0]
-    return list(set(citationlist))
-
 def parse_id_block(thisblock):
+    ''' take a block of text, and return two lists of ids '''
     thisblock = remove_parentheses(thisblock)
     pth = split_by_delimiter(thisblock)
     pth = [x.replace("@","") for x in pth if x.startswith('@')]
@@ -312,6 +285,7 @@ def parse_id_block(thisblock):
     return theseids, []
 
 def parse_pmid_block(thisblock):
+    ''' take a block of text, and return two lists of ids '''
     thisblock = remove_parentheses(thisblock)
     # better to use regex for this
     for p in ["PMID ", "PMID: ", "pmid:", "pmid :", "pmid: "]:
@@ -339,15 +313,57 @@ def parse_pmid_block(thisblock):
                 notpmid.append(x)                                
     return list(set(pmidstyle)), list(set(notpmid))
 
+def parse_doi_block(thisblock):
+    ''' take a block of text, and return two lists of ids '''
+    doistyle = []
+    notdoi = []
+    d = remove_parentheses(thisblock).replace("DOI:","doi:")
+    d = d.replace("https://doi.org/","doi:")
+    d = d.replace("doi: ", "doi:")
+    d = d.replace("https://doi.org/", "")
+    d = d.replace("http://doi.org/", "")
+    d = d.replace(",", " ")
+    dlist = [x.replace("doi:","") for x in d.split(' ') if x.startswith('doi:')]
+    for x in dlist:
+        found = findcitation(x, 'doi')
+        if found is not None:
+            doistyle.append(found['ID'])
+        else:
+            notdoi.append(x)
+    return doistyle, notdoi
+
+def parse_wholecitation_block(thisblock):
+    ''' take a block of text, and return two lists of ids '''
+    outids = []
+    # try a doi search first in case there's a doi in there
+    d = parse_doi_block(thisblock)[0]
+    if len(d)>0:
+        outids = d
+    else:
+        # if that doesn't work, try a title search
+        title = get_searchstring_from_wholecitation(thisblock)
+        print ("searching:", title)
+        found = findcitation(title, 'title', additionalinfo=thisblock)
+        print (title, found)
+        if found is not None:
+            outids.append(found['ID'])
+    return outids, []  # there is only ever one
+
 #------------
 
 def findcitation(info, infotype='pmid', additionalinfo='', ):
     '''
+        search the bibdat first
         search online in a variety of ways
+        if found, use bib.new to add it to global db
         return a single bibtex entry
         or None if not found or in doubt
     '''
     if infotype == 'pmid':
+        try:
+            return bib.pmids[info]
+        except:
+            pass
         pub = p2b([str(info)])
         if len(pub) > 0:
             if pub[0] != 'null' and pub[0] != None:
@@ -357,6 +373,10 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
         print ("PMID:{} NOT FOUND ON PUBMED".format(info))
         return None
     elif infotype == 'doi':
+        try:
+            return bib.dois[info]
+        except:
+            pass
         print ("this is a doi: {}".format(info))
         pub = search_pubmed(info, "doi")
         if len(pub) == 1:
@@ -365,6 +385,7 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
                 if pubent[0] != 'null' and pubent[0] != None:
                     bib.new(pubent[0])
                     return pubent[0]
+        print ("doi search failure: {}".format(info))
         return None
     elif infotype == 'title':
         if additionalinfo == '':
@@ -491,28 +512,15 @@ def replace_blocks(thistext, outputstyle="md"):
     # pmid first as they are the most likely to have errors
     p = get_pmid_citation_blocks(thistext)
     l = [x for x in get_latex_citation_blocks(thistext) if x not in p]
-    m = [x for x in get_md_citation_blocks(thistext) if x not in p and x not in l]
-    wr = get_wholereference_citation_blocks(thistext) # dict because only found articles included
-    r = {x:wr[x] for x in wr if wr[x] not in p+l+m}
+    m = [x for x in get_md_citation_blocks(thistext) if x not in p+l]
+    d = [x for x in get_doi_citation_blocks(thistext) if x not in p+l+m]
+    r = [x for x in get_wholereference_citation_blocks(thistext) if x not in p+l+m+d]
+    print ("Number blocks using pmid:{}".format(len(p)))
+    print ("Number blocks using latex:{}".format(len(l)))
+    print ("Number blocks using markdown:{}".format(len(m)))
+    print ("Number blocks using doi:{}".format(len(d)))
+    print ("Number blocks using wholeref:{}".format(len(r)))
     replacedict = {}
-    for b in m:
-        theseids = parse_id_block(b)[0]  # ids added to bib
-        if outputstyle=='tex' or outputstyle=='inline':
-            replacedict[b] = mdout(theseids, outputstyle)
-        elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm)
-        else:
-            continue
-    for b in l:
-        theseids = parse_id_block(b)[0]  # ids added to bib
-        if outputstyle=='md' or outputstyle=='inline':
-            replacedict[b] = mdout(theseids)
-        elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm)
-        else:
-            continue
     for b in p:
         thesepmids, theseothers = parse_pmid_block(b)
         theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
@@ -520,18 +528,42 @@ def replace_blocks(thistext, outputstyle="md"):
             replacedict[b] = mdout(theseids, notfound, outputstyle)
         else:
             continue
-    for pmid in r:
-        b = r[pmid]
-        thesepmids = [pmid]
-        theseothers = []
-        if outputstyle=='pmid':
-            replacedict[b] = pmidout([pmid],[])
+    for b in l:
+        theseids = parse_id_block(b)[0]  # ids added to bib
+        if outputstyle=='md' or outputstyle=='inline':
+            replacedict[b] = mdout(theseids, [], outputstyle)
+        elif outputstyle=='pmid':
+            pm, notpm = id2pmid(theseids) # ids added to bib
+            replacedict[b] = pmidout(pm, notpm)
         else:
-            theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
-            if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
-                replacedict[b] = mdout(theseids, notfound, outputstyle)
-            else:
-                continue
+            continue
+    for b in m:
+        theseids = parse_id_block(b)[0]  # ids added to bib
+        if outputstyle=='tex' or outputstyle=='inline':
+            replacedict[b] = mdout(theseids, [], outputstyle)
+        elif outputstyle=='pmid':
+            pm, notpm = id2pmid(theseids) # ids added to bib
+            replacedict[b] = pmidout(pm, notpm)
+        else:
+            continue
+    for b in d:
+        theseids = parse_doi_block(b)[0]  # ids added to bib
+        if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+            replacedict[b] = mdout(theseids, [], outputstyle)
+        elif outputstyle=='pmid':
+            pm, notpm = id2pmid(theseids) # ids added to bib
+            replacedict[b] = pmidout(pm, notpm)
+        else:
+            continue
+    for b in r: 
+        theseids, theseothers = parse_wholecitation_block(b)
+        if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+            replacedict[b] = mdout(theseids, [], outputstyle)
+        elif outputstyle=='pmid':
+            pm, notpm = id2pmid(theseids) # ids added to bib
+            replacedict[b] = pmidout(pm, notpm)
+        else:
+            continue
     for b in replacedict:
         if replacedict[b] == 'null':
             print ("{:>70} left alone".format(b))
@@ -554,6 +586,7 @@ def find_similar_keys(this_string, thisdict):
             bestmatch = key
             topscore = sim
     return bestmatch
+
 
 #------ PUBMED FUCTIONS -------
 

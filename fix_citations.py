@@ -106,7 +106,7 @@ try:
     bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
 except:
     pass # if bibfile not found or deliberately null, db remains blank.
-bib.make_pmid_dict()
+bib.make_alt_dicts()
 #-----------------
 # replace the ids in the text with the outputstyle
 text = citefunctions.replace_blocks(text, args.outputstyle)

@@ -9,6 +9,15 @@ sys.path.append(cwd)
 import citefunctions
 config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
 #-------------------
+import bib
+bib.init()
+try:
+    bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
+except:
+    pass # if bibfile not found or deliberately null, db remains blank.
+bib.make_alt_dicts()
+
+#-------------------
 alltests = False
 #-------------------
 
@@ -81,7 +90,9 @@ def test_bibadd():
     citefunctions.bibadd(bibdat, new)
     print (bibdat)
 
-test_replaceblocks(text4)
+print (citefunctions.findcitation("30177280"))
+
+#test_replaceblocks(text4)
 #test_replaceblocks(text1)
 #test_bibadd()
 #test_replacement(text2)

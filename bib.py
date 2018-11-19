@@ -12,20 +12,26 @@ def init():
     db = BibDatabase()
     global pmids
     pmids = {}
+    global dois
+    dois = {}
 
-def make_pmid_dict():
+def make_alt_dicts():
+    thesedics = [
+            (pmids, "pmid"),
+            (dois, "doi"),
+        ]
     for entry in full_bibdat.entries:
-        # pmid id dict
-        try:
-            entry["pmid"]
-        except:
-            continue
-        try:
-            pmids[entry["pmid"]]
-            print("duplicate PMID in biblatex database:{}".format(entry["pmid"]))
-        except:
-            pass
-        pmids[entry["pmid"]] = entry
+        for thisdict, thislabel in thesedics:
+            try:
+                entry[thislabel]
+            except:
+                continue
+            try:
+                thisdict[entry[thislabel]]
+                print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
+            except:
+                pass
+            thisdict[entry[thislabel]] = entry
 
 def new(entry):
     '''

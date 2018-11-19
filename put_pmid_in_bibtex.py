@@ -25,13 +25,14 @@ config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
+parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['zotero_bibfile'])
+parser.add_argument('-o', '--outbib',    help='outbib', default=config['default_bibfile'])
 args = parser.parse_args()
 #-------------------
 bibfile = os.path.expanduser(args.bibfile)
+outbib = os.path.expanduser(args.outbib)
 #-------------------
-outbib = bibfile.replace('.bib','.pmid.bib')
-speedup_store = bibfile.replace('.bib','.pmid.json')
+speedup_store = outbib.replace('.bib','.json')
 bibdat = citefunctions.read_bib_file(bibfile)
 #-------------------
 if os.path.exists(speedup_store):

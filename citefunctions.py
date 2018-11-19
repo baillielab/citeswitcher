@@ -542,8 +542,8 @@ def find_similar_keys(this_string, thisdict):
     '''
         search the keys of thisdict for a string similar to this_string
     '''
-    topscore=-1
-    bestmatch='none'
+    topscore = -1
+    bestmatch = 'none'
     for i, key in enumerate(thisdict.keys()):
         sim = difflib.SequenceMatcher(None, this_string, key).ratio()
         if sim>topscore:

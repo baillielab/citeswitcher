@@ -6,6 +6,7 @@ from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import string_to_latex
 
 additionaldicts = []
+verbose = False
 
 def init():
     global full_bibdat
@@ -28,7 +29,8 @@ def make_alt_dicts():
                 continue
             try:
                 thisdict[entry[thislabel]]
-                print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
+                if verbose:
+                    print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
             except:
                 pass
             thisdict[entry[thislabel]] = entry

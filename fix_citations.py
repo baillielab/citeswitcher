@@ -35,17 +35,19 @@ from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 #-------------------
 import bib
-bib.init() 
+bib.init()
 import citefunctions
-config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+config = citefunctions.getconfig(os.path.join(scriptpath, 'config.json'))
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
-# - essential
+# - essential
 parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
 parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
 # - optional
 parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
+parser.add_argument('-y', '--yaml', action="store_true", default=False, help='use default yaml file with pandoc')
 parser.add_argument('-i', '--include', action="store_true", default=False, help='include files')
 parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
@@ -76,6 +78,9 @@ if outpath != '':
     citefunctions.check_dir(outpath)
 filestem = '.'.join(filename.split('.')[:-1])
 bibout = os.path.join(outpath, filestem+".bib")
+yamlinstruction = ""
+if args.yaml:
+    yamlinstruction = os.path.abspath(os.path.join(scriptpath, config['yamlfile']))
 #-------------------
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
@@ -91,7 +96,7 @@ elif args.outputstyle == 'inline':
     print("outputstyle = inline")
     outputfile = os.path.join(outpath, filestem+".citeinline."+filetype)
 #-------------------
-# read input file
+# read input file
 if args.include:
     import include
     lines = include.parse_includes(args.filepath)
@@ -102,16 +107,13 @@ else:
 text = citefunctions.make_unicode(text)
 print ("read input file")
 #-------------------
-try:
-    bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
-except:
-    pass # if bibfile not found or deliberately null, db remains blank.
+bib.full_bibdat = citefunctions.read_bib_files([args.bibfile, bibout])
 bib.make_alt_dicts()
 #-----------------
 # replace the ids in the text with the outputstyle
 text = citefunctions.replace_blocks(text, args.outputstyle)
 #-----------------
-# save remote bibliography
+# save remote bibliography
 with open(bibout, 'w') as bf:
     bibtexparser.dump(bib.db, bf)
 #-----------------
@@ -125,14 +127,14 @@ if len(bib.newpmids)>0:
 if args.customreplace:
     text = citefunctions.findreplace(text, config['custom_find_replace'])
 #-----------------
-# save new text file
+# save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------
 if args.pandoc:
-    # make symlink to image dir (saves the hassle of converting all refs)
+    # make symlink to image dir (saves the hassle of converting all refs)
     home_img = os.path.abspath(os.path.join(os.path.split(args.filepath)[0], args.imagedir))
     subdir_img = os.path.abspath(os.path.join(outpath,args.imagedir))
     if os.path.exists(home_img) and not os.path.exists(subdir_img):
@@ -140,13 +142,12 @@ if args.pandoc:
         print (cmd)
         subprocess.call(cmd, shell=True)
     # run pandoc
-    pandocscript = os.path.join(os.path.dirname(__file__), 'run_pandoc.py')
-    cmd = "python {} -f {}".format(pandocscript, outputfile)
-    subprocess.call(cmd, shell=True)
-
-
-
-
+    workingdir, filename = os.path.split(os.path.abspath(outputfile))
+    os.chdir(workingdir)
+    citefunctions.callpandoc(filename, '.docx', yaml=yamlinstruction)
+    citefunctions.callpandoc(filename, '.pdf', yaml=yamlinstruction)
+    citefunctions.callpandoc(filename, '.tex', yaml=yamlinstruction)
+    citefunctions.callpandoc(filename, '.html', yaml=yamlinstruction)
 
 
 

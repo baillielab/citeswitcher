@@ -1,0 +1,16 @@
+---
+numbersections: false
+link-citations: true
+reference-section-title: References
+geometry: top=2cm, bottom=1.5cm, left=1cm, right=1cm
+header-includes: |
+    \usepackage{fancyhdr}
+    \pagestyle{fancy}
+    \fancyhead[LO,LE]{NIHR127974}
+    \fancyhead[CO,CE]{}
+    \fancyfoot[CO,CE]{}
+    \fancyfoot[LE,RO]{\thepage}
+figPrefix: Figure
+eqnPrefix: Equation
+tblPrefix: Table
+...

@@ -33,7 +33,7 @@ bibfile = os.path.expanduser(args.bibfile)
 outbib = os.path.expanduser(args.outbib)
 #-------------------
 speedup_store = outbib.replace('.bib','.json')
-bibdat = citefunctions.read_bib_file(bibfile)
+bibdat = citefunctions.read_bib_files([bibfile])
 #-------------------
 if os.path.exists(speedup_store):
     with open(speedup_store) as f:

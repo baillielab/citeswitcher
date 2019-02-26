@@ -4,17 +4,18 @@
     "default_bibfile": "~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.pmid.bib",
     "default_updatebibfile": "~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib_update_auto.bib",
     "email": "bio.entrez@sidies.com",
-    "testfile": "test/eme.md",
-    "cslfile": "sup-files/csl/nature.csl",
+    "yamlfile": "{{scriptpath}}default.yaml",
+    "testfile": "{{scriptpath}}test/eme.txt",
+    "cslfile": "{{scriptpath}}sup-files/csl/nature.csl",
     "imagedir": "img",
     "outputsubdirname": "",
     "linux_home": "/home/kbaillie/",
     "mac_home": "/Users/jkb/",
-    "custom_find_replace": 
+    "custom_find_replace":
         {
             "a2aa": "$\\alpha_2$-agonist"
         },
-    "custom_regex_replace": 
+    "custom_regex_replace":
         {
             "a2aa": "$\\alpha_2$-agonist"
         }

@@ -2,20 +2,18 @@
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
-import platform
-import re
-import string
-import json
-import sys
 import os
-import subprocess
-import requests
+import re
+import sys
+import json
 import difflib
+import calendar
+import requests
+import platform
+import subprocess
 from Bio import Entrez
 from Bio import Medline
-import json
 import xml.etree.ElementTree as ET
-import calendar
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
@@ -25,9 +23,15 @@ import latexchars
 #-------------
 import bib
 #-------------
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+#-------------
 def getconfig(cfgfile):
     with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
+    for item in data:
+        if type(data[item]) is str:
+            if data[item].startswith("{{scriptpath}}"):
+                data[item] = os.path.join(scriptpath, data[item].replace("{{scriptpath}}",""))
     try:
         Entrez.email = data['email']
     except:
@@ -48,11 +52,10 @@ squarebrackets = '\[[\s\S]+?\]'
 curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
-
 #-------------
 def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
-    
+
 def check_dir(this_dir):
     if not os.path.isdir(this_dir):
         os.mkdir(this_dir)
@@ -64,24 +67,28 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
-def callpandoc(f, out_ext, out_dir='', args=""):
-    cmd = 'pandoc {} --filter pandoc-crossref --filter pandoc-citeproc {} -o {}'.format(args, f, os.path.join(out_dir, newext(f, out_ext)))
+def callpandoc(f, out_ext, out_dir='', args="", yaml=""):
+    cmd = 'pandoc --pdf-engine=xelatex {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {}'.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
     print (cmd)
     subprocess.call(cmd, shell=True)
 
-def read_bib_file(bibfile):
-    # read bibtex file
-    try:
-        size = os.path.getsize(bibfile)
-    except:
-        print ("bib file not found at {}".format(bibfile))
-        sys.exit()
-    if size > 0:
-        with open(bibfile) as bf:
-            bibdb = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse_file(bf)
-    else:
-        bibdb = BibDatabase()
-        print ("bib file empty: {}".format(bibfile))
+def read_bib_files(bibfiles):
+    bfs = ""
+    bibdb = BibDatabase()
+    for bibfile in bibfiles:
+        if os.path.exists(bibfile):
+            # read bibtex file
+            try:
+                size = os.path.getsize(bibfile)
+            except:
+                print ("bib file not found at {}".format(bibfile))
+                sys.exit()
+            if size > 0:
+                with open(bibfile) as bf:
+                    bfs += bf.read()
+            else:
+                print ("bib file empty: {}".format(bibfile))
+    bibdb = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse(bfs)
     return bibdb
 
 def sort_db(thisdb, sortby="year"):
@@ -104,14 +111,14 @@ def findreplace(inputtext, frdict):
 
 #-------------
 def readheader(filecontents):
-    ''' 
+    '''
         Read a valid markdown header
         Input is full text of file
         Returns list of header items + full text of remainder
     '''
     t = filecontents.strip()
     t = t.replace('\r','\n')
-    lines = t.split('\n')
+    lines = [x for x in t.split('\n')]
     header = []
     remainder = filecontents
     if lines[0]=='---' and '...' in lines:
@@ -149,12 +156,15 @@ def flatten(thislist):
     else:
         return [item for sublist in thislist for item in sublist] #flatten list
 
+nbspace = re.compile(u"\N{NO-BREAK SPACE}", re.IGNORECASE)
 def make_unicode(inputstring):
     if type(inputstring) != str:
         inputstring =  inputstring.decode('utf-8')
-        return inputstring
-    else:
-        return inputstring
+    inputstring = nbspace.sub(" ", inputstring)
+    inputstring = inputstring.replace(u"\u2003", " ") # nonbreaking space
+    inputstring = inputstring.replace(u"\u0391", "$\alpha$") # alpha
+    inputstring = inputstring.replace(u"\ufeff", "") # sometimes appears at start of file
+    return inputstring
 
 def get_parethesised(thistext,parentheses=[squarebrackets, curlybrackets]):
     if type(parentheses)!=type([]):
@@ -176,6 +186,8 @@ def get_parethesised(thistext,parentheses=[squarebrackets, curlybrackets]):
             nested_out += qout
         else:
             nested_out.append(item)
+    for thislabel in markdown_labels_to_ignore:
+        nested_out = [x for x in nested_out if not x[1:].startswith(thislabel)]
     return nested_out
 
 def remove_parentheses(thistext):
@@ -193,6 +205,30 @@ def remove_parentheses(thistext):
     thistext = thistext.replace('\n',' ')
     thistext = thistext.replace('\r',' ')
     return thistext
+
+def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
+    '''
+        return flattened list of non-empty, stripped strings, split by delimiters
+    '''
+    thislist = this_string.split()
+    for d in delimiters:
+        thislist = [e.split(d) for e in thislist]
+        thislist = flatten(thislist)
+    thislist = [e.strip() for e in thislist if e!=""]
+    return thislist
+
+# get citation blocks functions
+
+def get_pmid_citation_blocks(inputtext):
+    confirmed_blocks = []
+    for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
+        for b in get_parethesised(inputtext, [theseparetheses]):
+            if "PMID" in b or "pmid" in b:
+                confirmed_blocks.append(b)
+                # remove this block so that nested blocks
+                # are only counted once
+                inputtext = inputtext.replace(b, '---citationblockremoved---')
+    return confirmed_blocks, inputtext
 
 def get_latex_citation_blocks(inputtext):
     confirmed_blocks = []
@@ -214,17 +250,6 @@ def get_md_citation_blocks(inputtext):
                 inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks, inputtext
 
-def get_pmid_citation_blocks(inputtext):
-    confirmed_blocks = []
-    for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
-        for b in get_parethesised(inputtext, [theseparetheses]):
-            if "PMID" in b or "pmid" in b:
-                confirmed_blocks.append(b)
-                # remove this block so that nested blocks
-                # are only counted once
-                inputtext = inputtext.replace(b, '---citationblockremoved---')
-    return confirmed_blocks, inputtext
-
 def get_doi_citation_blocks(inputtext):
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
@@ -238,7 +263,7 @@ def get_searchstring_from_wholecitation(wc):
     '''
         return the longest sentence that doesn't look like a list of authors or a citation
     '''
-    authorsep = '[A-Z], [A-Z]' # regex for [capital, comma, space, capital]
+    authorsep = '[A-Z], [A-Z]' # regex for [capital, comma, space, capital]
     lendict = {x:len(x) for x in remove_parentheses(wc).split('.')}
     for x in sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True):
         if len(x[0]) > 0:
@@ -251,7 +276,7 @@ def get_searchstring_from_wholecitation(wc):
 
 def get_wholereference_citation_blocks(inputtext):
     '''
-        finds wholecitations AND doi 
+        finds wholecitations AND doi
         return a list of citation blocks
     '''
     confirmed_blocks = []
@@ -269,16 +294,7 @@ def get_wholereference_citation_blocks(inputtext):
                     askedalready[b.replace('\n',' ')] = new_entry
     return confirmed_blocks, inputtext
 
-def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\r"]):
-    '''
-        return flattened list of non-empty, stripped strings, split by delimiters
-    '''
-    thislist = this_string.split()
-    for d in delimiters:
-        thislist = [e.split(d) for e in thislist]
-        thislist = flatten(thislist)
-    thislist = [e.strip() for e in thislist if e!=""]
-    return thislist
+# parse citation blocks functions
 
 def parse_id_block(thisblock):
     ''' take a block of text, and return two lists of ids '''
@@ -286,13 +302,13 @@ def parse_id_block(thisblock):
     pth = split_by_delimiter(thisblock)
     pth = [x.replace("@","") for x in pth if x.startswith('@')]
     theseids = list(set(pth))
-    bib.supplement(theseids)
+    bib.cite(theseids)
     return theseids, []
 
 def parse_pmid_block(thisblock):
     ''' take a block of text, and return two lists of ids '''
     thisblock = remove_parentheses(thisblock)
-    # better to use regex for this
+    # better to use regex for this
     for p in ["PMID ", "PMID: ", "pmid:", "pmid :", "pmid: "]:
         thisblock = thisblock.replace(p, "PMID:")
     thisblock = split_by_delimiter(thisblock)
@@ -300,7 +316,7 @@ def parse_pmid_block(thisblock):
     notpmid = []
     for x in thisblock:
         if x.startswith('PMID'):
-            # then assume this is a correctly formatted PMID
+            # then assume this is a correctly formatted PMID
             x = x.replace('PMID:','')
             x = x.replace('PMID','')
             x = x.strip()
@@ -315,7 +331,7 @@ def parse_pmid_block(thisblock):
                     raise ValueError('found more than one')
             except:
                 print ("failed to get pmid:{}".format(x))
-                notpmid.append(x)                                
+                notpmid.append(x)
     return list(set(pmidstyle)), list(set(notpmid))
 
 def parse_doi_block(thisblock):
@@ -345,14 +361,14 @@ def parse_wholecitation_block(thisblock):
     if len(d)>0:
         outids = d
     else:
-        # if that doesn't work, try a title search
+        # if that doesn't work, try a title search
         title = get_searchstring_from_wholecitation(thisblock)
         print ("searching:", title)
         found = findcitation(title, 'title', additionalinfo=thisblock)
         print ("title:", title, found)
         if found is not None:
             outids.append(found['ID'])
-    return outids, []  # there is only ever one
+    return outids, []  # there is only ever one
 
 #------------
 
@@ -366,8 +382,11 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
     '''
     if infotype == 'pmid':
         try:
+            # print ("searching for {} in bibdat".format(info))
             return bib.pmids[info]
         except:
+            # print ("{} not found in bib.pmids: ".format(info))
+            # print (bib.pmids.keys())
             pass
         pub = p2b([str(info)])
         if len(pub) > 0:
@@ -422,8 +441,7 @@ def id2pmid(theseids):
     pmidlist = []
     notpmidlist = []
     for thisid in theseids:
-        print ("1:", thisid)
-        # try to find this id in full_bibdat 
+        # try to find this id in full_bibdat
         try:
             bib.full_bibdat.entries_dict[thisid]
         except:
@@ -447,8 +465,11 @@ def id2pmid(theseids):
                 if new_entry is None:
                     notpmidlist.append(thisid)
                     continue
-            pmidlist.append(new_entry['pmid'])
-            bib.pmids[new_entry['pmid']] = new_entry
+            try:
+                pmidlist.append(new_entry['pmid'])
+                bib.pmids[new_entry['pmid']] = new_entry
+            except:
+                notpmidlist.append(thisid)
     return pmidlist, notpmidlist
 
 def pmid2id(thesepmids, others):
@@ -457,7 +478,7 @@ def pmid2id(thesepmids, others):
     for pmid in thesepmids:
         try:
             outids.append(bib.pmids[pmid]['ID'])
-            bib.supplement([bib.pmids[pmid]['ID']])
+            bib.cite([bib.pmids[pmid]['ID']])
         except:
             new_entry = findcitation(pmid, 'pmid')
             if new_entry is not None:
@@ -474,7 +495,6 @@ def format_inline(thisid):
         au = au[0] + " et al"
     else:
         au = au[0]
-
     formatted_citation = "{}. {} {};{}:{}".format(
         au,
         bib.db.entries_dict[thisid]['Journal'].capitalize(),
@@ -488,7 +508,7 @@ def format_inline(thisid):
 def pmidout(pmidlist, notpmidlist):
     # add to the outputdatabase
     bib.cite([bib.pmids[x]['ID'] for x in pmidlist])
-    # make a blockstring
+    # make a blockstring
     blockstring = ''
     if len(pmidlist) > 0:
         blockstring = '[' + ', '.join(["PMID:{}".format(x) for x in pmidlist]) + ']'
@@ -501,7 +521,7 @@ def pmidout(pmidlist, notpmidlist):
 def mdout(theseids, thesemissing=[], outputstyle="md"):
     # add to the outputdatabase
     bib.cite(theseids)
-    # make a blockstring
+    # make a blockstring
     blockstring = ''
     if len(theseids) == 0:
         blockstring = 'null'
@@ -510,7 +530,7 @@ def mdout(theseids, thesemissing=[], outputstyle="md"):
         if len(thesemissing) > 0:
             blockstring += "[***{}]".format(', '.join(thesemissing))
     elif outputstyle == "tex":
-        bib.supplement(theseids)
+        bib.cite(theseids)
         blockstring += "\\cite\{{}\}".format(', '.join(theseids))
         if len(thesemissing) > 0:
             blockstring += "[**{}]".format(', '.join(thesemissing))
@@ -635,7 +655,7 @@ def get_doi_from_pmid(pmid):
 # by Nick Loman
 
 def p2b(pmidlist):
-    ''' by Nick Loman '''
+    ''' by Nick Loman '''
 
     if type(pmidlist) != list:
         pmidlist = [pmidlist]
@@ -644,7 +664,7 @@ def p2b(pmidlist):
     efetch = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
     url = '{}?db=pubmed&id={}&rettype=abstract'.format(efetch, ','.join(pmidlist))
     r = requests.get(url)
-    ##print(r.text) # to examine the returned xml
+    ##print(r.text) # to examine the returned xml
     ## Loop over the PubMed IDs and parse the XML using https://docs.python.org/2/library/xml.etree.elementtree.html
     bibout = []
     root = ET.fromstring(r.text)
@@ -668,7 +688,7 @@ def p2b(pmidlist):
                 PMCID = thisid
             elif thisid.attrib['IdType'] == 'doi':
                 DOI = thisid
-        # format author list
+        # format author list
         authors = []
         for Author in PubmedArticle.iter('Author'):
             try:

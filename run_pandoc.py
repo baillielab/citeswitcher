@@ -15,4 +15,9 @@ os.chdir(workingdir)
 citefunctions.callpandoc(filename, '.docx')
 citefunctions.callpandoc(filename, '.pdf')
 citefunctions.callpandoc(filename, '.tex')
+citefunctions.callpandoc(filename, '.txt')
+
+
+
+
 

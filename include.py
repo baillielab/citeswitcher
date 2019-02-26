@@ -3,6 +3,7 @@
 
 import io
 import os
+import re
 #-----------------------------
 '''
 RULES:
@@ -66,12 +67,18 @@ def parse_includes(thisfile, verbose=False):
                     lines[i] = text
         return lines
 
-def save_new(thisfile, outputfile="auto"):
+def stripcomments(thistext):
+    comments = r'<!--[\s\S]+?-->'
+    return re.sub(comments, "", thistext)
+
+def save_new(thisfile, outputfile="auto", stripc=False):
     lines = parse_includes(thisfile)
     if outputfile == 'auto':
         outputfile = preext(thisfile, 'inc')
+    text = ''.join(lines)
+    text = stripcomments(text)
     with open(outputfile,'w') as o:
-        o.write(''.join(lines))
+        o.write(text)
     return outputfile
 
 #-----------------------------
@@ -79,8 +86,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filename', default=None,   help='filename')
+    parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
     args = parser.parse_args()
-    save_new(args.filename)
+    save_new(args.filename, stripc = args.stripcomments)
 
 
 

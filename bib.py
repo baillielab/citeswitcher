@@ -6,11 +6,12 @@ from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import string_to_latex
 
 additionaldicts = []
+verbose = False
 
 def init():
     global full_bibdat
     full_bibdat = BibDatabase()
-    global db # cited 
+    global db # cited
     db = BibDatabase()
     global pmids
     pmids = {}
@@ -28,7 +29,8 @@ def make_alt_dicts():
                 continue
             try:
                 thisdict[entry[thislabel]]
-                print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
+                if verbose:
+                    print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
             except:
                 pass
             thisdict[entry[thislabel]] = entry
@@ -43,11 +45,14 @@ def new(entry):
         except:
             entry['ENTRYTYPE'] = 'article'
         try:
-            full_bibdat.entries_dict[entry['ID']] # existing full_bibdat entry ALWAYS takes precedence
+            full_bibdat.entries_dict[entry['ID']] # existing full_bibdat entry ALWAYS takes precedence
+            # add any additional fields from online by merging dictionaries
+            entry = {**full_bibdat.entries_dict[entry['ID']], **entry}
         except:
-            entry = cleanbib(entry)
-            full_bibdat.entries = [entry] + full_bibdat.entries
-            full_bibdat.entries_dict[entry['ID']] = entry
+            pass
+        entry = cleanbib(entry)
+        full_bibdat.entries = [entry] + full_bibdat.entries
+        full_bibdat.entries_dict[entry['ID']] = entry
         for thisdict, thislabel in additionaldicts:
             try:
                 entry[thislabel]
@@ -58,20 +63,6 @@ def new(entry):
             except:
                 thisdict[entry[thislabel]] = entry
 
-def supplement(theseids):
-    #print ("supp:", theseids)
-    for thisid in theseids:
-        try:
-            full_bibdat.entries_dict[thisid]
-        except:
-            continue
-        db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
-        db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
-
-def cleanbib(bibtex_entry):
-    return bibtex_entry # this function disabled as it may not be necessary now because p2b() always returns clean latex
-    #return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
-
 def cite(theseids):
     for thisid in theseids:
         try:
@@ -80,6 +71,8 @@ def cite(theseids):
             db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
             db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
 
+def cleanbib(bibtex_entry):
+    return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
 
 
 

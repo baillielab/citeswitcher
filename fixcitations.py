@@ -1,4 +1,4 @@
-﻿#!/usr/bin/python
+﻿#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
@@ -27,12 +27,15 @@ Two new files will be written:
 export PATH=$PATH":$HOME/Dropbox/3_scripts_and_programs/citeswitcher/"
 
 
+sudo ln -s "~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py" /usr/local/bin/fix
+
 
 '''
 
 #-------------------
-import string,os,sys
+import os
 import io
+import sys
 import subprocess
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
@@ -52,13 +55,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
 parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
 # - optional
-parser.add_argument('-p', '--pandoc', action="store_true", default=False, help='also run pandoc')
+parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[], help='append as many pandoc formats as you want: pdf docx html txt md')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
 parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
 parser.add_argument('-y', '--yaml', action="store_true", default=False, help='use default yaml file with pandoc')
-parser.add_argument('-i', '--include', action="store_true", default=False, help='include files')
+parser.add_argument('-i', '--include', action="store_false", default=True, help='do NOT include files')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
 parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
+parser.add_argument('-m', '--messy', action="store_true", default=False, help='disable clean up of intermediate files')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
 parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
@@ -90,6 +94,13 @@ bibout = os.path.join(outpath, filestem+".bib")
 yamlinstruction = ""
 if args.yaml:
     yamlinstruction = os.path.abspath(os.path.join(scriptpath, config['yamlfile']))
+    yamlsource = yamlinstruction
+else:
+    yamlsource = args.filepath
+yamldata = citefunctions.getyaml(yamlsource)
+if 'bibliography' in yamldata.keys():
+    bibout = yamldata['bibliography']
+    print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
 #-------------------
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
@@ -113,7 +124,7 @@ else:
     with io.open(args.filepath, "r", encoding="utf-8") as f:
         text = f.read()
 text = citefunctions.make_unicode(text)
-if args.pandoc or args.stripcomments:
+if len(args.pandoc_outputs)>0 or args.stripcomments:
     text = include.stripcomments(text)
 if args.verbose:
     print ("read input file: ", args.filepath)
@@ -149,7 +160,7 @@ text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------
-if args.pandoc:
+if len(args.pandoc_outputs)>0:
     # make symlink to image dir (saves the hassle of converting all refs)
     home_img = os.path.abspath(os.path.join(os.path.split(args.filepath)[0], args.imagedir))
     subdir_img = os.path.abspath(os.path.join(outpath,args.imagedir))
@@ -160,11 +171,19 @@ if args.pandoc:
     # run pandoc
     workingdir, filename = os.path.split(os.path.abspath(outputfile))
     os.chdir(workingdir)
-    citefunctions.callpandoc(filename, '.docx', yaml=yamlinstruction)
+    for thisformat in args.pandoc_outputs:
+        citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction)
+    if len(args.pandoc_outputs)>0 and not args.messy:
+        #then clean up because the intermediate files are probably not wanted
+        cmd = "rm {}".format(outputfile)
+        print (cmd)
+        subprocess.call(cmd, shell=True)
+    '''
     citefunctions.callpandoc(filename, '.pdf', yaml=yamlinstruction)
     #citefunctions.callpandoc(filename, '.tex', yaml=yamlinstruction)
     #citefunctions.callpandoc(filename, '.html', yaml=yamlinstruction)
     #citefunctions.callpandoc(filename, '.txt', yaml=yamlinstruction)
+    '''
 
 
 

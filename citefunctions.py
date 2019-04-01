@@ -110,6 +110,17 @@ def findreplace(inputtext, frdict):
     return inputtext
 
 #-------------
+def getyaml(filepath):
+    with open(filepath) as f:
+        y = readheader(f.read())
+    yml = {}
+    for line in y[0]:
+        line = line.split(": ")
+        if len(line)>1:
+            yml[line[0]]=line[1]
+    return yml
+
+
 def readheader(filecontents):
     '''
         Read a valid markdown header
@@ -121,9 +132,13 @@ def readheader(filecontents):
     lines = [x for x in t.split('\n')]
     header = []
     remainder = filecontents
-    if lines[0]=='---' and '...' in lines:
-        header = lines[1:lines.index('...')]
-        remainder = '\n'.join(lines[lines.index('...')+1:])
+    if lines[0]=='---':
+        if '...' in lines:
+            header = lines[1:lines.index('...')]
+            remainder = '\n'.join(lines[lines.index('...')+1:])
+        elif '---' in lines[1:]:
+            header = lines[1:lines.index('---')]
+            remainder = '\n'.join(lines[lines[1:].index('---')+1:])
     return header, remainder
 
 def addheader(filecontents, bibtexfile, cslfilepath='null'):
@@ -133,9 +148,9 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     filecontents = filecontents.strip()
     header, remainder = readheader(filecontents)
     headerkeys = [x.split(':')[0] for x in header]
+    '''
     if 'title' not in headerkeys:
         header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
-    '''
     if 'date' not in headerkeys:
         header.append('date: \\today')
     '''
@@ -625,6 +640,8 @@ def find_similar_keys(this_string, thisdict):
 
 def search_pubmed(search_string, restrictfields=""):
     '''return a list of pmids for articles found by a search string'''
+    if search_string is None:
+        return []
     if len(search_string.strip())==0:
         return []
     max_returns = 500

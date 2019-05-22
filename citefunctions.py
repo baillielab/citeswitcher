@@ -14,14 +14,18 @@ import subprocess
 from Bio import Entrez
 from Bio import Medline
 import xml.etree.ElementTree as ET
+import latexchars
+#-------------
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(scriptpath, 'python-bibtexparser-master/'))
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import latex_to_unicode
-import latexchars
 #-------------
 import bib
+import include
 #-------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 #-------------
@@ -53,6 +57,25 @@ curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
 #-------------
+class cd:
+    """Context manager for changing the current working directory"""
+    """ by Brian M. Hunt https://stackoverflow.com/users/19212/brian-m-hunt"""
+    '''
+    use like this:
+    with cd(scriptpath):
+        ...nested code
+    '''
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+#-------------
+
 def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
 
@@ -88,7 +111,8 @@ def read_bib_files(bibfiles):
                     bfs += bf.read()
             else:
                 print ("bib file empty: {}".format(bibfile))
-    bibdb = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True).parse(bfs)
+                return bibdb
+    bibdb = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True, interpolate_strings=False).parse(bfs, partial=False)
     return bibdb
 
 def sort_db(thisdb, sortby="year"):
@@ -110,16 +134,19 @@ def findreplace(inputtext, frdict):
     return inputtext
 
 #-------------
-def getyaml(filepath):
-    with open(filepath) as f:
-        y = readheader(f.read())
+def getyaml(filepath, do_includes=True):
+    if do_includes:
+        text = include.parse_includes(filepath)
+        y = readheader(text)
+    else:
+        with open(filepath) as f:
+            y = readheader(f.read())
     yml = {}
     for line in y[0]:
         line = line.split(": ")
         if len(line)>1:
             yml[line[0]]=line[1]
     return yml
-
 
 def readheader(filecontents):
     '''
@@ -129,16 +156,15 @@ def readheader(filecontents):
     '''
     t = filecontents.strip()
     t = t.replace('\r','\n')
-    lines = [x for x in t.split('\n')]
+    lines = [x for x in t.split('\n')] # don't strip because indentation matters
     header = []
     remainder = filecontents
     if lines[0]=='---':
-        if '...' in lines:
-            header = lines[1:lines.index('...')]
-            remainder = '\n'.join(lines[lines.index('...')+1:])
-        elif '---' in lines[1:]:
-            header = lines[1:lines.index('---')]
-            remainder = '\n'.join(lines[lines[1:].index('---')+1:])
+        for yamlending in ['...','---']:
+            if yamlending in lines:
+                header = lines[1:lines.index(yamlending)]
+                remainder = '\n'.join(lines[lines.index('...')+1:])
+                break
     return header, remainder
 
 def addheader(filecontents, bibtexfile, cslfilepath='null'):
@@ -407,6 +433,7 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
         if len(pub) > 0:
             if pub[0] != 'null' and pub[0] != None:
                 print ("PMID:{} found online".format(info))
+                print (pub[0])
                 bib.new(pub[0])
                 return pub[0]
         print ("PMID:{} NOT FOUND ON PUBMED".format(info))
@@ -569,6 +596,7 @@ def replace_blocks(thistext, outputstyle="md"):
     print ("Number blocks using doi:{}".format(len(d)))
     print ("Number blocks using wholeref:{}".format(len(r)))
     replacedict = {}
+    # there are slightly different procedures for each reference type:
     for b in p:
         thesepmids, theseothers = parse_pmid_block(b)
         theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
@@ -603,7 +631,7 @@ def replace_blocks(thistext, outputstyle="md"):
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
-    for b in r: 
+    for b in r:
         theseids, theseothers = parse_wholecitation_block(b)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             replacedict[b] = mdout(theseids, theseothers, outputstyle)
@@ -646,18 +674,28 @@ def search_pubmed(search_string, restrictfields=""):
         return []
     max_returns = 500
     days = "all"
-    handle = Entrez.esearch(db="pubmed", term=search_string, retmax=max_returns, rettype="medline", field=restrictfields)
-    r = Entrez.read(handle)
+    try:
+        handle = Entrez.esearch(db="pubmed", term=search_string, retmax=max_returns, rettype="medline", field=restrictfields)
+        r = Entrez.read(handle)
+    except:
+        print ("pubmed search failure")
+        return []
     return r['IdList']
 
 def get_links_from_pmid(pmid):
-    return Medline.parse(Entrez.elink(dbfrom="pubmed",id=pmid,cmd="prlinks"))
+    try:
+        return Medline.parse(Entrez.elink(dbfrom="pubmed",id=pmid,cmd="prlinks"))
+    except:
+        return []
 
 def get_article_from_pmid(pmid):
-    output = Entrez.efetch(db="pubmed", id=pmid, rettype="medline", retmode="text")
-    details = Medline.parse(output)
-    thisarticle = next(details)
-    return thisarticle
+    try:
+        output = Entrez.efetch(db="pubmed", id=pmid, rettype="medline", retmode="text")
+        details = Medline.parse(output)
+        thisarticle = next(details)
+        return thisarticle
+    except:
+        return []
 
 def get_doi_from_pmid(pmid):
     articledetails = get_article_from_pmid(pmid)
@@ -680,7 +718,10 @@ def p2b(pmidlist):
     ## Fetch XML data from Entrez.
     efetch = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
     url = '{}?db=pubmed&id={}&rettype=abstract'.format(efetch, ','.join(pmidlist))
-    r = requests.get(url)
+    try:
+        r = requests.get(url)
+    except:
+        return []
     ##print(r.text) # to examine the returned xml
     ## Loop over the PubMed IDs and parse the XML using https://docs.python.org/2/library/xml.etree.elementtree.html
     bibout = []
@@ -779,7 +820,7 @@ def p2b(pmidlist):
         if ISSN is not None:
             bib["ISSN"] = ISSN.text
         bib["pmid"] = PMID.text
-        # always return clean latex 
+        # always return clean latex
         bib = {d:latex_to_unicode(bib[d]) for d in bib.keys()}
         bibout.append(bib)
     return bibout
@@ -788,7 +829,7 @@ def p2b(pmidlist):
 
 def getlink(entry):
     '''
-        return DOI link,  PMC link, or PMID link in that order 
+        return DOI link,  PMC link, or PMID link in that order
     '''
     try:
         url = "http://dx.doi.org/{}".format(entry['doi'])

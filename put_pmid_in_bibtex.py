@@ -6,15 +6,21 @@
     read through a bib file and add pmids for every citation that has one
     store the work in a json file so it isn't repeated next time we run
     can be run as a cron job to keep pmids up to date
+
+
+    pyparsing error is corrected by downloading latest bibtexparser
+https://stackoverflow.com/questions/49321998/bibtexparser-pyparsing-parseexception-expected-end-of-text
 '''
 
 #-------------------
-import string
-import sys
 import os
 import io
+import sys
 import json
 import subprocess
+#-------------------
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(scriptpath, 'python-bibtexparser-master/'))
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter

@@ -37,6 +37,9 @@ import os
 import io
 import sys
 import subprocess
+#-------------------
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(scriptpath, 'python-bibtexparser-master/'))
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
@@ -58,21 +61,41 @@ parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown'
 parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[], help='append as many pandoc formats as you want: pdf docx html txt md')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
 parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
-parser.add_argument('-y', '--yaml', action="store_true", default=False, help='use default yaml file with pandoc')
+parser.add_argument('-y', '--yaml',  default="thisfile", help='use this yaml file with pandoc; use "default" for config set one')
 parser.add_argument('-i', '--include', action="store_false", default=True, help='do NOT include files')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
 parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
 parser.add_argument('-m', '--messy', action="store_true", default=False, help='disable clean up of intermediate files')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
-parser.add_argument('-u', '--updatebibfile',    help='bibfile', default=config['default_updatebibfile'])
 parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
 parser.add_argument('-img', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
 args = parser.parse_args()
 #-------------------
-args.bibfile = os.path.expanduser(args.bibfile)
-args.updatebibfile = os.path.expanduser(args.updatebibfile)
-args.filepath = os.path.expanduser(args.filepath)
+args.filepath = os.path.abspath(os.path.expanduser(args.filepath))
+with citefunctions.cd(os.path.split(args.filepath)[0]):
+    args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
+    outpath, filename = os.path.split(args.filepath)
+    pandocoutpath = os.path.join(outpath, args.outputsubdir)
+    if pandocoutpath != '':
+        citefunctions.check_dir(pandocoutpath)
+    filestem = '.'.join(filename.split('.')[:-1])
+    bibout = os.path.join(outpath, filestem+".bib")
+    yamlinstruction = ""
+    if args.yaml == "default":
+        yamlinstruction = os.path.abspath(os.path.join(scriptpath, config['yamlfile']))
+        yamlsource = yamlinstruction
+    elif args.yaml == "thisfile":
+        yamlsource = args.filepath
+    else:
+        yamlinstruction = os.path.abspath(os.path.join(outpath, args.yaml))
+        yamlsource = yamlinstruction
+    yamldata = citefunctions.getyaml(yamlsource, do_includes=args.include)
+    if 'bibliography' in yamldata.keys():
+        bibout = yamldata['bibliography']
+        print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
+        yamlbib = True
+    bibout = os.path.abspath(bibout)
 #-------------------
 print("Filepath:", args.filepath)
 filetype = "unknown filetype"
@@ -84,23 +107,6 @@ elif args.filepath.endswith(".tex"):
     filetype="tex"
     if args.outputstyle=='null':
         args.outputstyle = 'tex'
-#-------------------
-outpath, filename = os.path.split(args.filepath)
-outpath = os.path.join(outpath, args.outputsubdir)
-if outpath != '':
-    citefunctions.check_dir(outpath)
-filestem = '.'.join(filename.split('.')[:-1])
-bibout = os.path.join(outpath, filestem+".bib")
-yamlinstruction = ""
-if args.yaml:
-    yamlinstruction = os.path.abspath(os.path.join(scriptpath, config['yamlfile']))
-    yamlsource = yamlinstruction
-else:
-    yamlsource = args.filepath
-yamldata = citefunctions.getyaml(yamlsource)
-if 'bibliography' in yamldata.keys():
-    bibout = yamldata['bibliography']
-    print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
 #-------------------
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
@@ -118,8 +124,8 @@ elif args.outputstyle == 'inline':
 #-------------------
 # read input file
 if args.include:
-    lines = include.parse_includes(args.filepath)
-    text = ''.join(lines)
+    text = include.parse_includes(args.filepath)
+    #text = ''.join(lines)
 else:
     with io.open(args.filepath, "r", encoding="utf-8") as f:
         text = f.read()
@@ -129,18 +135,20 @@ if len(args.pandoc_outputs)>0 or args.stripcomments:
 if args.verbose:
     print ("read input file: ", args.filepath)
 #-------------------
+bib.db = citefunctions.read_bib_files([bibout])
 if args.localbibonly:
-    bib.full_bibdat = citefunctions.read_bib_files([bibout])
+    if args.verbose: print ("reading localbibonly")
+    bib.full_bibdat = bib.db
 else:
+    if args.verbose: print ("reading bibfiles:", args.bibfile, bibout)
     bib.full_bibdat = citefunctions.read_bib_files([args.bibfile, bibout])
 bib.make_alt_dicts()
-if args.verbose:
-    print ("read bib files: ", [args.bibfile, bibout])
 #-----------------
 # replace the ids in the text with the outputstyle
 text = citefunctions.replace_blocks(text, args.outputstyle)
 #-----------------
 # save remote bibliography
+print ('saving remote bibliography for this file here:', bibout)
 with open(bibout, 'w') as bf:
     bibtexparser.dump(bib.db, bf)
 #-----------------
@@ -161,29 +169,17 @@ with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------
 if len(args.pandoc_outputs)>0:
-    # make symlink to image dir (saves the hassle of converting all refs)
-    home_img = os.path.abspath(os.path.join(os.path.split(args.filepath)[0], args.imagedir))
-    subdir_img = os.path.abspath(os.path.join(outpath,args.imagedir))
-    if os.path.exists(home_img) and not os.path.exists(subdir_img):
-        cmd = "ln -s {} {}".format(home_img, subdir_img)
-        print (cmd)
-        subprocess.call(cmd, shell=True)
     # run pandoc
     workingdir, filename = os.path.split(os.path.abspath(outputfile))
     os.chdir(workingdir)
     for thisformat in args.pandoc_outputs:
-        citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction)
+        citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction, out_dir=pandocoutpath)
     if len(args.pandoc_outputs)>0 and not args.messy:
         #then clean up because the intermediate files are probably not wanted
         cmd = "rm {}".format(outputfile)
         print (cmd)
         subprocess.call(cmd, shell=True)
-    '''
-    citefunctions.callpandoc(filename, '.pdf', yaml=yamlinstruction)
-    #citefunctions.callpandoc(filename, '.tex', yaml=yamlinstruction)
-    #citefunctions.callpandoc(filename, '.html', yaml=yamlinstruction)
-    #citefunctions.callpandoc(filename, '.txt', yaml=yamlinstruction)
-    '''
+
 
 
 

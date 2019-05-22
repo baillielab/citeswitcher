@@ -2,6 +2,10 @@
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
+import os
+import sys
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(scriptpath, 'python-bibtexparser-master/'))
 from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import string_to_latex
 
@@ -49,8 +53,7 @@ def new(entry):
             # add any additional fields from online by merging dictionaries
             entry = {**full_bibdat.entries_dict[entry['ID']], **entry}
         except:
-            pass
-        entry = cleanbib(entry)
+            entry = cleanbib(entry)
         full_bibdat.entries = [entry] + full_bibdat.entries
         full_bibdat.entries_dict[entry['ID']] = entry
         for thisdict, thislabel in additionaldicts:
@@ -68,18 +71,16 @@ def cite(theseids):
         try:
             db.entries_dict[thisid]
         except:
+            try:
+                full_bibdat.entries_dict[thisid]
+            except:
+                print ("id not found in full bibtex file: ", thisid)
+                return
             db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
             db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
 
 def cleanbib(bibtex_entry):
     return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
-
-
-
-
-
-
-
 
 
 

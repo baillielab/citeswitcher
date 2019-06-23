@@ -2,6 +2,12 @@
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
+
+'''
+TODO - there's a problem where if a citation is added by pmid, and exists in both the base bib and the custom bib file, it gets cited by the id in the base bib file so then pandoc can't find it.
+==> need to prioritise the local version when making pmid db
+'''
+
 import os
 import sys
 scriptpath = os.path.dirname(os.path.realpath(__file__))

@@ -48,6 +48,7 @@ from bibtexparser.bibdatabase import BibDatabase
 import bib
 bib.init()
 import include
+import wordcount
 import citefunctions
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 config = citefunctions.getconfig(os.path.join(scriptpath, 'config.json'))
@@ -161,6 +162,8 @@ if len(bib.newpmids)>0:
 #-----------------
 if args.customreplace:
     text = citefunctions.findreplace(text, config['custom_find_replace'])
+#-----------------
+print ("Word count:", wordcount.wordcount(text))
 #-----------------
 # save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))

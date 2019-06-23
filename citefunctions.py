@@ -91,13 +91,12 @@ def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
 def callpandoc(f, out_ext, out_dir='', args="", yaml=""):
-    cmd = 'pandoc --pdf-engine=xelatex {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {}'.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
+    cmd = 'pandoc -s --pdf-engine=xelatex {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {}'.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
     print (cmd)
     subprocess.call(cmd, shell=True)
 
 def read_bib_files(bibfiles):
     bfs = ""
-    bibdb = BibDatabase()
     for bibfile in bibfiles:
         if os.path.exists(bibfile):
             # read bibtex file
@@ -111,9 +110,11 @@ def read_bib_files(bibfiles):
                     bfs += bf.read()
             else:
                 print ("bib file empty: {}".format(bibfile))
-                return bibdb
-    bibdb = bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True, interpolate_strings=False).parse(bfs, partial=False)
-    return bibdb
+                return BibDatabase()
+    try:
+        return bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True, interpolate_strings=False).parse(bfs, partial=False)
+    except:
+        return BibDatabase()
 
 def sort_db(thisdb, sortby="year"):
     sorter = {}
@@ -300,6 +301,13 @@ def get_doi_citation_blocks(inputtext):
                 inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks, inputtext
 
+def clean_searchstring(this_string):
+    dirtychars = ['“','”','`']
+    for d in dirtychars:
+        this_string = this_string.replace(d,'')
+    return this_string
+
+
 def get_searchstring_from_wholecitation(wc):
     '''
         return the longest sentence that doesn't look like a list of authors or a citation
@@ -313,7 +321,8 @@ def get_searchstring_from_wholecitation(wc):
                 if ":" in x[0] and ";" in x[0]: # probably not a title
                     continue
                 else:
-                    return x[0]
+                    return clean_searchstring(x[0])
+
 
 def get_wholereference_citation_blocks(inputtext):
     '''
@@ -321,18 +330,14 @@ def get_wholereference_citation_blocks(inputtext):
         return a list of citation blocks
     '''
     confirmed_blocks = []
-    askedalready = {}
     for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parethesised(inputtext, [theseparetheses]):
+            b = b.replace('\n',' ')
             if "." in b or ":" in b:
-                try:
-                    new_entry = askedalready[b.replace('\n',' ')]
-                except:
-                    new_entry = parse_wholecitation_block(b)
+                new_entry = parse_wholecitation_block(b)
                 if new_entry is not None:
                     confirmed_blocks.append(str(b))
                     inputtext = inputtext.replace(b, '---citationblockremoved---')
-                    askedalready[b.replace('\n',' ')] = new_entry
     return confirmed_blocks, inputtext
 
 # parse citation blocks functions
@@ -394,22 +399,27 @@ def parse_doi_block(thisblock):
             notdoi.append(x)
     return doistyle, notdoi
 
+askedalready = {}
 def parse_wholecitation_block(thisblock):
     ''' take a block of text, and return two lists of ids '''
-    outids = []
-    # try a doi search first in case there's a doi in there
-    d = parse_doi_block(thisblock)[0]
-    if len(d)>0:
-        outids = d
-    else:
-        # if that doesn't work, try a title search
-        title = get_searchstring_from_wholecitation(thisblock)
-        print ("searching:", title)
-        found = findcitation(title, 'title', additionalinfo=thisblock)
-        print ("title:", title, found)
-        if found is not None:
-            outids.append(found['ID'])
-    return outids, []  # there is only ever one
+    try:
+        return askedalready[thisblock]
+    except:
+        outids = []
+        # try a doi search first in case there's a doi in there
+        d = parse_doi_block(thisblock)[0]
+        if len(d)>0:
+            outids = d
+        else:
+            # if that doesn't work, try a title search
+            title = get_searchstring_from_wholecitation(thisblock)
+            print ("searching pubmed for this title:\n\t", title)
+            found = findcitation(title, 'title', additionalinfo=thisblock)
+            print ("title:", title, found)
+            if found is not None:
+                outids.append(found['ID'])
+        askedalready[thisblock] = outids, []
+        return outids, []  # there is only ever one
 
 #------------
 
@@ -456,6 +466,7 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
     elif infotype == 'title':
         if additionalinfo == '':
             additionalinfo = title
+        # should add code to search bibdat for title here ***TODO***
         pub = search_pubmed(info, "title")
         if len(pub) == 1:
             pmid = pub[0]

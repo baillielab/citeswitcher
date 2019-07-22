@@ -108,6 +108,8 @@ elif args.filepath.endswith(".tex"):
     filetype="tex"
     if args.outputstyle=='null':
         args.outputstyle = 'tex'
+if "md" in args.pandoc_outputs:
+    args.messy = True # must turn off the automatic deletion of intermediate files!
 #-------------------
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
@@ -138,7 +140,7 @@ if args.verbose:
 #-------------------
 bib.db = citefunctions.read_bib_files([bibout])
 if args.localbibonly:
-    if args.verbose: print ("reading localbibonly")
+    if args.verbose: print ("reading localbibonly", bibout)
     bib.full_bibdat = bib.db
 else:
     if args.verbose: print ("reading bibfiles:", args.bibfile, bibout)

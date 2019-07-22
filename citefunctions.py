@@ -91,7 +91,7 @@ def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
 def callpandoc(f, out_ext, out_dir='', args="", yaml=""):
-    cmd = 'pandoc -s --pdf-engine=xelatex {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {}'.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
+    cmd = 'pandoc -s --atx-headers --pdf-engine=xelatex {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {}'.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
     print (cmd)
     subprocess.call(cmd, shell=True)
 
@@ -158,15 +158,14 @@ def readheader(filecontents):
     t = filecontents.strip()
     t = t.replace('\r','\n')
     lines = [x for x in t.split('\n')] # don't strip because indentation matters
-    header = []
-    remainder = filecontents
     if lines[0]=='---':
-        for yamlending in ['...','---']:
-            if yamlending in lines:
-                header = lines[1:lines.index(yamlending)]
-                remainder = '\n'.join(lines[lines.index('...')+1:])
-                break
-    return header, remainder
+        h = re.findall( '---[\s\S]+?---',filecontents)
+        if len(h)==0:
+            h = re.findall( '---[\s\S]+?...',filecontents)
+    header = []
+    if len(h)>0:
+        header = h[0].split('\n')[1:-1]
+    return header, filecontents
 
 def addheader(filecontents, bibtexfile, cslfilepath='null'):
     '''
@@ -208,7 +207,7 @@ def make_unicode(inputstring):
     inputstring = inputstring.replace(u"\ufeff", "") # sometimes appears at start of file
     return inputstring
 
-def get_parethesised(thistext,parentheses=[squarebrackets, curlybrackets]):
+def get_parenthesised(thistext,parentheses=[squarebrackets, curlybrackets]):
     if type(parentheses)!=type([]):
         print ("Error, parentheses must be in a list")
     outlist = []
@@ -264,7 +263,7 @@ def split_by_delimiter(this_string, delimiters=[";",",","[","]"," ","\n","\t","\
 def get_pmid_citation_blocks(inputtext):
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
-        for b in get_parethesised(inputtext, [theseparetheses]):
+        for b in get_parenthesised(inputtext, [theseparetheses]):
             if "PMID" in b or "pmid" in b:
                 confirmed_blocks.append(b)
                 # remove this block so that nested blocks
@@ -274,14 +273,14 @@ def get_pmid_citation_blocks(inputtext):
 
 def get_latex_citation_blocks(inputtext):
     confirmed_blocks = []
-    for b in get_parethesised(inputtext, [latexbrackets]):
+    for b in get_parenthesised(inputtext, [latexbrackets]):
         confirmed_blocks.append(b)
         inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks, inputtext
 
 def get_md_citation_blocks(inputtext):
     confirmed_blocks = []
-    for b in get_parethesised(inputtext, [squarebrackets]):
+    for b in get_parenthesised(inputtext, [squarebrackets]):
         if "@" in b:
             confirmed = True
             for crossreflabel in markdown_labels_to_ignore:
@@ -295,7 +294,7 @@ def get_md_citation_blocks(inputtext):
 def get_doi_citation_blocks(inputtext):
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
-        for b in get_parethesised(inputtext, [theseparetheses]):
+        for b in get_parenthesised(inputtext, [theseparetheses]):
             if "doi:" in b or "DOI:" in b or "https://doi.org/" in b:
                 confirmed_blocks.append(b)
                 inputtext = inputtext.replace(b, '---citationblockremoved---')
@@ -331,7 +330,7 @@ def get_wholereference_citation_blocks(inputtext):
     '''
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets]:
-        for b in get_parethesised(inputtext, [theseparetheses]):
+        for b in get_parenthesised(inputtext, [theseparetheses]):
             b = b.replace('\n',' ')
             if "." in b or ":" in b:
                 new_entry = parse_wholecitation_block(b)
@@ -348,8 +347,8 @@ def parse_id_block(thisblock):
     pth = split_by_delimiter(thisblock)
     pth = [x.replace("@","") for x in pth if x.startswith('@')]
     theseids = list(set(pth))
-    bib.cite(theseids)
-    return theseids, []
+    notfound = bib.cite(theseids)
+    return [x for x in theseids if x not in notfound], notfound
 
 def parse_pmid_block(thisblock):
     ''' take a block of text, and return two lists of ids '''
@@ -559,6 +558,7 @@ def format_inline(thisid):
 
 #------------
 def pmidout(pmidlist, notpmidlist):
+    print (pmidlist, notpmidlist, "<===")
     # add to the outputdatabase
     bib.cite([bib.pmids[x]['ID'] for x in pmidlist])
     # make a blockstring
@@ -583,7 +583,6 @@ def mdout(theseids, thesemissing=[], outputstyle="md"):
         if len(thesemissing) > 0:
             blockstring += "[***{}]".format(', '.join(thesemissing))
     elif outputstyle == "tex":
-        bib.cite(theseids)
         blockstring += "\\cite\{{}\}".format(', '.join(theseids))
         if len(thesemissing) > 0:
             blockstring += "[**{}]".format(', '.join(thesemissing))
@@ -621,7 +620,7 @@ def replace_blocks(thistext, outputstyle="md"):
             replacedict[b] = mdout(theseids, notfound, outputstyle)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm)
+            replacedict[b] = pmidout(pm, notpm + notfound)
         else:
             continue
     for b in m:
@@ -630,7 +629,7 @@ def replace_blocks(thistext, outputstyle="md"):
             replacedict[b] = mdout(theseids, notfound, outputstyle)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm)
+            replacedict[b] = pmidout(pm, notpm + notfound)
         else:
             continue
     for b in d:
@@ -639,7 +638,7 @@ def replace_blocks(thistext, outputstyle="md"):
             replacedict[b] = mdout(theseids, notfound, outputstyle)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm)
+            replacedict[b] = pmidout(pm, notpm + notfound)
         else:
             continue
     for b in r:

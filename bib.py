@@ -73,6 +73,7 @@ def new(entry):
                 thisdict[entry[thislabel]] = entry
 
 def cite(theseids):
+    fails = []
     for thisid in theseids:
         try:
             db.entries_dict[thisid]
@@ -81,9 +82,11 @@ def cite(theseids):
                 full_bibdat.entries_dict[thisid]
             except:
                 print ("id not found in full bibtex file: ", thisid)
-                return
+                fails.append(thisid)
+                continue
             db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
             db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
+    return fails
 
 def cleanbib(bibtex_entry):
     return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}

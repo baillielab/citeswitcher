@@ -82,13 +82,12 @@ if __name__ == "__main__":
     else:
         linelist = []
         with cd(os.path.split(os.path.abspath(args.filename))[0]):
-            with open(args.filename) as f:
-                text = f.read()
-                text = include.stripcomments(text)
-                lines= text.split('\n')
-                linelist += get_header(lines)
-                for this_section in args.sections:
-                    linelist += get_section(lines, this_section)
+            text = include.parse_includes(args.filename)
+            text = include.stripcomments(text)
+            lines= text.split('\n')
+            linelist += get_header(lines)
+            for this_section in args.sections:
+                linelist += get_section(lines, this_section)
 
             with open(args.outputfile,'w') as o:
                 for i in sorted(list(set(linelist))):

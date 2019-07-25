@@ -30,6 +30,16 @@ export PATH=$PATH":$HOME/Dropbox/3_scripts_and_programs/citeswitcher/"
 sudo ln -s "~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py" /usr/local/bin/fix
 
 
+# OUTPUT FILE ARGUMENTS LOGIC
+
+Two outputs are specified.
+-o determines the CITATION FORMAT and is intended to be the primary use case - switching between different citation formats
+-p determines the PANDOC OUTPUT FORMAT and provides a quick workflow for generating fully formatted documents
+
+If -p is specified, -o must be md.
+If both -p is specified an -o is not unset or md, this indicates that the user's expectation is different ==> so the script exits.
+
+
 '''
 
 #-------------------
@@ -65,6 +75,7 @@ parser.add_argument('-v', '--verbose', action="store_true", default=False, help=
 parser.add_argument('-y', '--yaml',  default="thisfile", help='use this yaml file with pandoc; use "default" for config set one')
 parser.add_argument('-i', '--include', action="store_false", default=True, help='do NOT include files')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
+parser.add_argument('-x', '--xelatex', action="store_true", default=False, help='use xelatex in pandoc build')
 parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
 parser.add_argument('-m', '--messy', action="store_true", default=False, help='disable clean up of intermediate files')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
@@ -98,32 +109,40 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         yamlbib = True
     bibout = os.path.abspath(bibout)
 #-------------------
-print("Filepath:", args.filepath)
-filetype = "unknown filetype"
+if len(args.pandoc_outputs) > 0:  # if -p is set
+    if args.outputstyle not in ['null','md','markdown']: # and -o is not md
+        print ("FAIL: both -o and -p options are set. If requesting pandoc output with -p, the citation format output (-o) must be markdown (it defaults to this).")
+        sys.exit()
+    args.outputstyle = 'md' # MANDATE THAT OUTPUTSTYLE IS MD
+    if 'md' in args.pandoc_outputs:
+        args.messy = True # mustn't delete the requested outputfile!
+    print ("pandoc output types: {}".format(args.pandoc_outputs))
+# IF NO PANDOC OUTPUT IS REQUESTED, guess at output style if it isn't already set.
+if args.verbose:
+    print("Filepath:", args.filepath)
+input_file_extension = "unrecognisedinputfile"
 if args.filepath.endswith(".md") or args.filepath.endswith(".txt"):
-    filetype="md"
+    input_file_extension="md"
     if args.outputstyle=='null':
         args.outputstyle = 'md'
 elif args.filepath.endswith(".tex"):
-    filetype="tex"
+    input_file_extension="tex"
     if args.outputstyle=='null':
         args.outputstyle = 'tex'
-if "md" in args.pandoc_outputs:
-    args.messy = True # must turn off the automatic deletion of intermediate files!
 #-------------------
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
     print("outputstyle = pmid")
-    outputfile = os.path.join(outpath, filestem+".citepmid."+filetype)
+    outputfile = os.path.join(outpath, filestem+".citepmid."+input_file_extension)
 elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
     print("outputstyle = md")
-    outputfile = os.path.join(outpath, filestem+".citemd."+filetype)
+    outputfile = os.path.join(outpath, filestem+".citemd."+input_file_extension)
 elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
     print("outputstyle = tex")
-    outputfile = os.path.join(outpath, filestem+".citetex."+filetype)
+    outputfile = os.path.join(outpath, filestem+".citetex."+input_file_extension)
 elif args.outputstyle == 'inline':
     print("outputstyle = inline")
-    outputfile = os.path.join(outpath, filestem+".citeinline."+filetype)
+    outputfile = os.path.join(outpath, filestem+".citeinline."+input_file_extension)
 #-------------------
 # read input file
 if args.include:
@@ -169,7 +188,8 @@ print ("Word count:", wordcount.wordcount(text))
 #-----------------
 # save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
-text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
+if input_file_extension in ['md', 'markdown']:
+    text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------
@@ -178,7 +198,7 @@ if len(args.pandoc_outputs)>0:
     workingdir, filename = os.path.split(os.path.abspath(outputfile))
     os.chdir(workingdir)
     for thisformat in args.pandoc_outputs:
-        citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction, out_dir=pandocoutpath)
+        citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction, out_dir=pandocoutpath, x=args.xelatex)
     if len(args.pandoc_outputs)>0 and not args.messy:
         #then clean up because the intermediate files are probably not wanted
         cmd = "rm {}".format(outputfile)

@@ -53,6 +53,7 @@ markdown_labels_to_ignore = [
 #-------------
 #regexes
 squarebrackets = '\[[\s\S]+?\]'
+commentedsquarebrackets = '<!--\[[\s\S]+?\]-->'
 curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
@@ -90,8 +91,14 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
-def callpandoc(f, out_ext, out_dir='', args="", yaml=""):
-    cmd = 'pandoc -s --atx-headers --pdf-engine=xelatex {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {}'.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
+def callpandoc(f, out_ext, out_dir='', args="", yaml="", x=False):
+    cmd = 'pandoc --atx-headers {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {} '.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
+    if x:
+        cmd += " --pdf-engine=xelatex "
+    if out_ext in ['.md','.txt']:
+        cmd += "  -t markdown-citations  "
+    else:
+        cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT OUT
     print (cmd)
     subprocess.call(cmd, shell=True)
 
@@ -157,15 +164,17 @@ def readheader(filecontents):
     '''
     t = filecontents.strip()
     t = t.replace('\r','\n')
+    header = []
+    remainder = filecontents
     lines = [x for x in t.split('\n')] # don't strip because indentation matters
     if lines[0]=='---':
         h = re.findall( '---[\s\S]+?---',filecontents)
         if len(h)==0:
             h = re.findall( '---[\s\S]+?...',filecontents)
-    header = []
-    if len(h)>0:
-        header = h[0].split('\n')[1:-1]
-    return header, filecontents
+        if len(h)>0:
+            header = h[0].split('\n')[1:-1]
+        remainder = filecontents.replace(h[0],'')
+    return header, remainder
 
 def addheader(filecontents, bibtexfile, cslfilepath='null'):
     '''
@@ -174,6 +183,8 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     filecontents = filecontents.strip()
     header, remainder = readheader(filecontents)
     headerkeys = [x.split(':')[0] for x in header]
+    comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
+    header = comments+header
     '''
     if 'title' not in headerkeys:
         header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
@@ -186,7 +197,7 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
         header.append('bibliography: {}'.format(bibtexfile))
     else:
         header[header.index([y for y in header if y.startswith("bibliography")][0])] = 'bibliography: {}'.format(bibtexfile)
-    return '---\n{}\n...\n{}'.format('\n'.join(header), remainder)
+    return '---\n{}\n---\n{}'.format('\n'.join(header), remainder)
 
 #-------------
 
@@ -207,7 +218,7 @@ def make_unicode(inputstring):
     inputstring = inputstring.replace(u"\ufeff", "") # sometimes appears at start of file
     return inputstring
 
-def get_parenthesised(thistext,parentheses=[squarebrackets, curlybrackets]):
+def get_parenthesised(thistext,parentheses=[squarebrackets, commentedsquarebrackets, curlybrackets]):
     if type(parentheses)!=type([]):
         print ("Error, parentheses must be in a list")
     outlist = []

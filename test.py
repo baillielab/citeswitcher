@@ -17,9 +17,9 @@ bib.init()
 try:
     bib.full_bibdat = citefunctions.read_bib_file(args.bibfile)
 except:
-    pass # if bibfile not found or deliberately null, db remains blank.
+    pass # if bibfile not found or deliberately null, db remains blank.
 bib.make_alt_dicts()
-
+import include
 #-------------------
 alltests = False
 #-------------------
@@ -101,6 +101,8 @@ def test_unicode(thisstring):
             thisstring2[i].encode('utf-8')
             )
 
+def test_includes(inputfile='test/test.txt'):
+    print (include.parse_includes(inputfile))
 
 #print (citefunctions.findcitation("30177280"))
 
@@ -122,8 +124,8 @@ def test_unicode(thisstring):
 #test_translator()
 #test_translator()
 #test_stringmatch()
-
-test_unicode(text5)
+#test_unicode(text5)
+test_includes()
 
 
 

@@ -16,6 +16,7 @@ FILENAME IS NEXT WORD AFTER INCLUDESECTION
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 #-----------------------------
 comments = r'<!--[\s\S]+?-->'
+md_include_format = r'{![\s\S]+?!}' # support for markdown-include format: pip install markdown-include
 #-----------------------------
 class cd:
     """Context manager for changing the current working directory"""
@@ -43,8 +44,14 @@ def get_filename(thisinclude_instruction):
     return x[x.index("INCLUDESECTION")+1].strip().replace("'",'').replace('"','')
 
 def get_includes(thistext):
-    includelist = [x for x in re.findall(comments, thistext) if "INCLUDESECTION" in x and not "#INCLUDESECTION" in x]
-    return includelist
+    includedict = {}
+    for x in re.findall(comments, thistext):
+        if "INCLUDESECTION" in x and not "#INCLUDESECTION" in x:
+            includedict[x] = get_filename(x)
+    for x in re.findall(md_include_format, thistext):
+        includedict[x] = x[2:-2].strip()
+    print (includedict)
+    return includedict
 
 def parse_includes(thisfile, verbose=False):
     '''
@@ -56,10 +63,10 @@ def parse_includes(thisfile, verbose=False):
     filedir = os.path.split(os.path.abspath(thisfile))[0]
     with cd(filedir):
         includes = get_includes(text)
-        additionalfiles = list(set([get_filename(x) for x in includes if x != None]))
+        additionalfiles = list(set(includes.values()))
         if verbose:
-            print ("working in: {}".format(filedir))
-            print ("Adding", additionalfiles)
+            print ("[include.py] working in: {}".format(filedir))
+            print ("[include.py] adding", additionalfiles)
         for filepath in additionalfiles:
             filepath = os.path.normpath(filepath)
             if os.path.exists(filepath):
@@ -68,7 +75,7 @@ def parse_includes(thisfile, verbose=False):
                 print ("\n\n*** INCLUDE FILE NOT FOUND: {} ***\n\n".format(filepath))
                 continue
             for inc in includes:
-                if get_filename(inc) == filepath:
+                if includes[inc] == filepath:
                     text = text.replace(inc, newtext)
     return text
 

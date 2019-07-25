@@ -50,7 +50,6 @@ def get_includes(thistext):
             includedict[x] = get_filename(x)
     for x in re.findall(md_include_format, thistext):
         includedict[x] = x[2:-2].strip()
-    print (includedict)
     return includedict
 
 def parse_includes(thisfile, verbose=False):

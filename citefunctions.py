@@ -96,7 +96,7 @@ def callpandoc(f, out_ext, out_dir='', args="", yaml="", x=False):
     if x:
         cmd += " --pdf-engine=xelatex "
     if out_ext in ['.md','.txt']:
-        cmd += "  -t markdown-citations  "
+        cmd += "  -t markdown-citations -t markdown-strict "
     else:
         cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT OUT
     print (cmd)
@@ -168,12 +168,24 @@ def readheader(filecontents):
     remainder = filecontents
     lines = [x for x in t.split('\n')] # don't strip because indentation matters
     if lines[0]=='---':
-        h = re.findall( '---[\s\S]+?---',filecontents)
-        if len(h)==0:
-            h = re.findall( '---[\s\S]+?...',filecontents)
+        h1 = re.findall( '---[\s\S]+?---',filecontents)
+        h2 = re.findall( '---[\s\S]+?\.\.\.',filecontents)
+
+        if len(h1)>0 and len(h2)>0:
+            print ("both yaml header formats match! Taking the shorter one")
+            if len(h1[0]) < len(h2[0]):
+                h=h1[0]
+                print ("Choosing ---/---\n", h)
+            else:
+                h=h2[0]
+                print ("Choosing ---/...\n", h)
+        elif len(h1)>0:
+            h = h1[0]
+        elif len(h2)>0:
+            h = h2[0]
         if len(h)>0:
-            header = h[0].split('\n')[1:-1]
-        remainder = filecontents.replace(h[0],'')
+            header = h.split('\n')[1:-1]
+        remainder = filecontents.replace(h,'')
     return header, remainder
 
 def addheader(filecontents, bibtexfile, cslfilepath='null'):
@@ -185,12 +197,8 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     headerkeys = [x.split(':')[0] for x in header]
     comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
     header = comments+header
-    '''
     if 'title' not in headerkeys:
         header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
-    if 'date' not in headerkeys:
-        header.append('date: \\today')
-    '''
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
     if 'bibliography' not in headerkeys:

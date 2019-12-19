@@ -85,7 +85,7 @@ if __name__ == "__main__":
             text = include.parse_includes(args.filename)
             text = include.stripcomments(text)
             lines= text.split('\n')
-            linelist += get_header(lines)
+            #linelist += get_header(lines)
             for this_section in args.sections:
                 linelist += get_section(lines, this_section)
 

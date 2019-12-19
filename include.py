@@ -17,6 +17,7 @@ scriptpath = os.path.dirname(os.path.realpath(__file__))
 #-----------------------------
 comments = r'<!--[\s\S]+?-->'
 md_include_format = r'{![\s\S]+?!}' # support for markdown-include format: pip install markdown-include
+redactionpattern = r"\[STARTREDACT\][\s\S]+?\[ENDREDACT\]"
 #-----------------------------
 class cd:
     """Context manager for changing the current working directory"""
@@ -41,7 +42,7 @@ def preext(filepath, thisext):
 
 def get_filename(thisinclude_instruction):
     x = thisinclude_instruction.split(' ')
-    return x[x.index("INCLUDESECTION")+1].strip().replace("'",'').replace('"','')
+    return x[x.index("INCLUDESECTION")+1].strip().replace("'",'').replace('"','').replace('-->','')
 
 def get_includes(thistext):
     includedict = {}
@@ -90,6 +91,12 @@ def save_new(thisfile, outputfile="auto", stripc=False):
     with open(outputfile,'w') as o:
         o.write(text)
     return outputfile
+
+def redact(text):
+    text, n = re.subn(redactionpattern, " (redacted section) ", text)
+    print ("{} redacted sections".format(n))
+    text = re.sub(r"<!--[\s\S]+?-->", "", text) # remove html comments too
+    return text
 
 #-----------------------------
 if __name__ == "__main__":

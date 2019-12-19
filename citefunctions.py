@@ -48,7 +48,8 @@ def getconfig(cfgfile):
 #-------------
 markdown_labels_to_ignore = [
     '@fig:','@sec:','@tbl:','@eq:',
-    '#fig:','#sec:','#tbl:','#eq:'
+    '#fig:','#sec:','#tbl:','#eq:',
+    '(\d+(\.\d+)?)(pt|em)',
     ]
 #-------------
 #regexes
@@ -57,6 +58,9 @@ commentedsquarebrackets = '<!--\[[\s\S]+?\]-->'
 curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
+#-------------
+#-------------
+pubmedsearchstrings = ["PMID", "pmid:", "PubMed:", "Pubmed", "pubmed"]
 #-------------
 class cd:
     """Context manager for changing the current working directory"""
@@ -197,8 +201,10 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     headerkeys = [x.split(':')[0] for x in header]
     comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
     header = comments+header
+    '''
     if 'title' not in headerkeys:
         header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
+    '''
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
     if 'bibliography' not in headerkeys:
@@ -247,7 +253,11 @@ def get_parenthesised(thistext,parentheses=[squarebrackets, commentedsquarebrack
         else:
             nested_out.append(item)
     for thislabel in markdown_labels_to_ignore:
-        nested_out = [x for x in nested_out if not x[1:].startswith(thislabel)]
+        for x in nested_out:
+            if re.match(thislabel, x[1:]):
+                if not x[1:].startswith(thislabel):
+                    print ("regex picked up this match: {} {} which was missed by startswith".format(x[1:], thislabel))
+        nested_out = [x for x in nested_out if not re.match(thislabel, x[1:])]
     return nested_out
 
 def remove_parentheses(thistext):
@@ -283,11 +293,13 @@ def get_pmid_citation_blocks(inputtext):
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
         for b in get_parenthesised(inputtext, [theseparetheses]):
-            if "PMID" in b or "pmid" in b:
-                confirmed_blocks.append(b)
-                # remove this block so that nested blocks
-                # are only counted once
-                inputtext = inputtext.replace(b, '---citationblockremoved---')
+            for p in pubmedsearchstrings:
+                if p in b:
+                    confirmed_blocks.append(b)
+                    # remove this block so that nested blocks
+                    # are only counted once
+                    inputtext = inputtext.replace(b, '---citationblockremoved---')
+                    break
     return confirmed_blocks, inputtext
 
 def get_latex_citation_blocks(inputtext):
@@ -373,8 +385,9 @@ def parse_pmid_block(thisblock):
     ''' take a block of text, and return two lists of ids '''
     thisblock = remove_parentheses(thisblock)
     # better to use regex for this
-    for p in ["PMID ", "PMID: ", "pmid:", "pmid :", "pmid: "]:
-        thisblock = thisblock.replace(p, "PMID:")
+    for p in pubmedsearchstrings:
+        for c in [" :", " ", ": "]:
+            thisblock = thisblock.replace(p+c, "PMID:")
     thisblock = split_by_delimiter(thisblock)
     pmidstyle = []
     notpmid = []

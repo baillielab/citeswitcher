@@ -77,6 +77,7 @@ parser.add_argument('-i', '--include', action="store_false", default=True, help=
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False, help='use xelatex in pandoc build')
 parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
+parser.add_argument('-redact', '--redact', action="store_true", default=False, help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
 parser.add_argument('-m', '--messy', action="store_true", default=False, help='disable clean up of intermediate files')
 parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
@@ -152,6 +153,8 @@ else:
     with io.open(args.filepath, "r", encoding="utf-8") as f:
         text = f.read()
 text = citefunctions.make_unicode(text)
+if args.redact:
+    text = include.redact(text)
 if len(args.pandoc_outputs)>0 or args.stripcomments:
     text = include.stripcomments(text)
 if args.verbose:

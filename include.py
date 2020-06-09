@@ -4,6 +4,9 @@
 import io
 import os
 import re
+import pandas as pd
+import numpy as np
+from tabulate import tabulate
 #-----------------------------
 '''
 RULES:
@@ -11,6 +14,13 @@ INCLUDESECTION IN LINE
 #INCLUDESECTION NOT IN LINE
 WHOLE LINE IS REPLACED
 FILENAME IS NEXT WORD AFTER INCLUDESECTION
+OR use {!blah.txt!}
+OR use {!blah.xlsx!}
+
+RULES:
+    - if £ in column name, format currency
+    - drop columns beginning with #
+
 '''
 #-----------------------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
@@ -53,12 +63,55 @@ def get_includes(thistext):
         includedict[x] = x[2:-2].strip()
     return includedict
 
+
+def clear_nan(thisdf):
+    thisdf = thisdf.replace('£nan', '', regex=True)
+    thisdf = thisdf.replace('nan', '')
+    thisdf = thisdf.replace('NaN', '', regex=True)
+    thisdf = thisdf.replace(np.nan, '', regex=True)
+    return thisdf
+
+def include_excel(excelfile):
+    '''
+    parse and include excel file
+
+    table format options
+    tablefmt="github"
+    tablefmt="simple"
+    tablefmt="grid"
+    tablefmt="pipe"
+    tablefmt="fancygrid"
+    '''
+
+    # BUDGET
+    df = pd.read_excel(excelfile, index_col=0, dtype=str)
+    for colname in df.columns:
+        if colname.startswith('#'):
+            df = df.drop(colname, axis=1)
+        if "£" in colname:
+            df[colname] = pd.to_numeric(df[colname])
+            df[colname] = df[colname].map("£{0:.2f}".format)
+    # format number
+    for thiscol in []:
+        df[thiscol] = df[thiscol].map("{}".format)
+    df = clear_nan(df)
+    return tabulate(df, tablefmt="grid", headers="keys")
+
+
 def parse_includes(thisfile, verbose=False):
     '''
         read file and return text with includes
     '''
-    with io.open(thisfile, "r", encoding="utf-8") as f:
-        text = f.read()
+    if os.path.exists(thisfile):
+        try:
+            with io.open(thisfile, "r", encoding="utf-8") as f:
+                text = f.read()
+        except:
+            print ("\n\n*** INITIAL INCLUDE I/O PROBLEM (COULD BE DROPBOX): {} ***\n\n".format(thisfile))
+            return ""
+    else:
+        print ("\n\n*** INITIAL INCLUDE FILE NOT FOUND: {} ***\n\n".format(thisfile))
+        return ""
 
     filedir = os.path.split(os.path.abspath(thisfile))[0]
     with cd(filedir):
@@ -70,12 +123,15 @@ def parse_includes(thisfile, verbose=False):
         for filepath in additionalfiles:
             filepath = os.path.normpath(filepath)
             if os.path.exists(filepath):
-                newtext = parse_includes(filepath)
+                if not filepath.endswith('.xlsx'): # don't try to read excel directly
+                    newtext = parse_includes(filepath)
             else:
                 print ("\n\n*** INCLUDE FILE NOT FOUND: {} ***\n\n".format(filepath))
                 continue
             for inc in includes:
                 if includes[inc] == filepath:
+                    if filepath.endswith('.xlsx'):
+                        newtext = include_excel(filepath)
                     text = text.replace(inc, newtext)
     return text
 

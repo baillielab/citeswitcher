@@ -102,7 +102,8 @@ def callpandoc(f, out_ext, out_dir='', args="", yaml="", x=False):
     if out_ext in ['.md','.txt']:
         cmd += "  -t markdown-citations -t markdown-strict "
     else:
-        cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT OUT
+        if out_ext not in ['.html']:
+            cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT/HTML OUT
     print (cmd)
     subprocess.call(cmd, shell=True)
 

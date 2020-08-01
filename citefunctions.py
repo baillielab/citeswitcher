@@ -367,20 +367,14 @@ def parse_citation_block(thisblock):
         'notfound':[],
     }
     theseids = split_by_delimiter(remove_parentheses(thisblock))
-    print (theseids)
     for thisid in theseids:
-        print ("ok how about this one:",thisid)
         if thisblock.startswith("\\cite"): #latex formatting
-            print ("it's latex")
             results['ids'].append(thisid)
         elif is_pmid(thisid):
-            print ("it's a pmid")
             results['pmids'].append(thisid.replace("PMID:","").strip())
         elif is_md(thisid):
-            print ("it's a md")
             results['ids'].append(thisid.replace("@","").strip())
         elif is_doi(thisid):
-            print ("it's a doi")
             # DOI is not an output format. Translate to an output format here (PMID or MD)
             new_entry = findcitation(thisid.replace("doi:","").strip(), 'doi')
             if new_entry:
@@ -410,7 +404,6 @@ def clean_id(thisid):
 
 def is_pmid(x):
     x = clean_id(x)
-    print ("x is ", x)
     if x.startswith('PMID:') and len(x)>5:
         return True
     return False
@@ -594,7 +587,6 @@ def format_inline(thisid):
 
 #------------
 def pmidout(pmidlist, notpmidlist):
-    print (pmidlist, notpmidlist, "<===")
     # make a blockstring
     blockstring = ''
     if len(pmidlist) > 0:
@@ -645,7 +637,6 @@ def replace_blocks(thistext, outputstyle="md"):
     replacedict = {}
     # there are slightly different procedures for each reference type:
     for b in p+l:
-        print (b)
         citedhere = parse_citation_block(b)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib

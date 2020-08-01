@@ -16,7 +16,7 @@ from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import string_to_latex
 
 additionaldicts = []
-verbose = True
+verbose = False
 
 def init():
     global full_bibdat

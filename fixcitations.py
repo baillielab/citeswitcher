@@ -72,7 +72,7 @@ parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown'
 parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[], help='append as many pandoc formats as you want: pdf docx html txt md')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
 parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
-parser.add_argument('-y', '--yaml', default=None, help='use this yaml file with pandoc; use "normal" or "fancy" for config set one')
+parser.add_argument('-y', '--yaml', default='choose', help='use this yaml file with pandoc; use "normal" or "fancy" for config set one; "choose" indicates that normal will be used only if there is no yaml in the current file')
 parser.add_argument('-i', '--include', action="store_false", default=True, help='do NOT include files')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False, help='use xelatex in pandoc build')
@@ -94,22 +94,26 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         citefunctions.check_dir(pandocoutpath)
     filestem = '.'.join(filename.split('.')[:-1])
     bibout = os.path.join(outpath, filestem+".bib")
-    yamlinstruction = args.filepath
-    if args.yaml:
-        if not args.yaml.endswith(".yaml"): # then this isn't a user-defined yaml file. Search config files.
-            configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
-            if os.path.exists(configyamlpath):
-                yamlinstruction = configyamlpath
+    yamlsource = args.filepath
+    if args.yaml=="choose":
+        if len(citefunctions.getyaml(args.filepath, do_includes=args.include)) == 0:
+            # then there is no yaml in this input file. use normal.
+            args.yaml = "normal"
+    if not args.yaml.endswith(".yaml"):
+        # then this isn't a user-defined yaml file. Search config files.
+        configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
+        if os.path.exists(configyamlpath):
+            yamlsource = configyamlpath
+    else:
+        specyamlpath = os.path.abspath(os.path.join(outpath, args.yaml))
+        if os.path.exists(specyamlpath): # read user-specified yaml file
+            yamlsource = specyamlpath
         else:
-            specyamlpath = os.path.abspath(os.path.join(outpath, args.yaml))
-            if os.path.exists(specyamlpath): # read user-specified yaml file
-                yamlinstruction = specyamlpath
-            else:
-                print ("YAML file ({}) not found.\nProceeding with in-file YAML.".format(configyamlpath))
-    yamldata = citefunctions.getyaml(yamlinstruction, do_includes=args.include)
+            print ("YAML file ({}) not found.\nProceeding with in-file YAML.".format(configyamlpath))
+    yamldata = citefunctions.getyaml(yamlsource, do_includes=args.include)
     if 'bibliography' in yamldata.keys():
         bibout = yamldata['bibliography']
-        print ('using yaml-specified bib from {}: {}'.format(yamlinstruction, yamldata['bibliography']))
+        print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
         yamlbib = True
     bibout = os.path.abspath(bibout)
 #-------------------
@@ -208,6 +212,9 @@ if len(args.pandoc_outputs)>0:
     # run pandoc
     workingdir, filename = os.path.split(os.path.abspath(outputfile))
     os.chdir(workingdir)
+    yamlinstruction = ""
+    if yamlsource != args.filepath:
+        yamlinstruction = yamlsource #NB this is concatenated with the input file by pandoc
     for thisformat in args.pandoc_outputs:
         citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction, out_dir=pandocoutpath, x=args.xelatex)
     if len(args.pandoc_outputs)>0 and not args.messy:

@@ -98,7 +98,12 @@ def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
 def callpandoc(f, out_ext, out_dir='', args="", yaml="", x=False):
-    cmd = 'pandoc --atx-headers {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {} '.format(args, yaml, f, os.path.join(out_dir, newext(f, out_ext)))
+    cmd = 'pandoc --atx-headers {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {} '.format(
+            args,
+            yaml,
+            f,
+            os.path.join(out_dir, newext(f, out_ext))
+        )
     if x:
         cmd += " --pdf-engine=xelatex "
     if out_ext in ['.md','.txt']:
@@ -298,7 +303,7 @@ def get_mixed_citation_blocks(inputtext):
     return citation blocks for PMID, DOI and MD formats, and new input text with these removed
     '''
     confirmed_blocks = []
-    for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
+    for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parenthesised(inputtext, [theseparetheses]):
             for crossreflabel in markdown_labels_to_ignore:
                 if remove_parentheses(b).startswith(crossreflabel):
@@ -369,7 +374,6 @@ def parse_citation_block(thisblock):
     theseids = split_by_delimiter(remove_parentheses(thisblock))
     for thisid in theseids:
         thisid = clean_id(thisid)
-        print (thisid)
         if thisblock.startswith("\\cite"): #latex formatting
             results['ids'].append(thisid)
         elif thisid.startswith('PMID:') and len(thisid)>5:

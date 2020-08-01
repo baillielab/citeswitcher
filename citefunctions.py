@@ -60,7 +60,9 @@ curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
 #-------------
-pubmedsearchstrings = ["PMID", "pmid:", "PubMed:", "Pubmed", "pubmed"]
+pubmedsearchstrings = ["PMID:", "PubMed:"]
+mdsearchstrings = ["@"]
+doisearchstrings = ["doi:", "https://doi.org/", "http://doi.org/"]
 #-------------
 class cd:
     """Context manager for changing the current working directory"""
@@ -282,43 +284,37 @@ def split_by_delimiter(this_string, delimiters=[";",","]):
     '''
         return flattened list of non-empty, stripped strings, split by delimiters
     '''
-    thislist = this_string.split()
+    thislist = [this_string]
     for d in delimiters:
         thislist = [e.split(d) for e in thislist]
         thislist = flatten(thislist)
     thislist = [e.strip() for e in thislist if e!=""]
     return thislist
 
-# get citation blocks functions
+# ==== get citation blocks functions ====
 
 def get_mixed_citation_blocks(inputtext):
     '''
-    return citation blocks for PMID, DOI and MD formats
+    return citation blocks for PMID, DOI and MD formats, and new input text with these removed
     '''
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets, roundbrackets]:
         for b in get_parenthesised(inputtext, [theseparetheses]):
-            for p in pubmedsearchstrings:
-                if p in b:
+            for crossreflabel in markdown_labels_to_ignore:
+                if remove_parentheses(b).startswith(crossreflabel):
+                    continue
+            for stem in pubmedsearchstrings+mdsearchstrings+doisearchstrings:
+                if stem.lower() in b.lower(): # case-insensitive match
                     confirmed_blocks.append(b)
                     # remove this block so that nested blocks are only counted once
                     inputtext = inputtext.replace(b, '---citationblockremoved---')
                     break
-            if "@" in b:
-                confirmed = True
-                for crossreflabel in markdown_labels_to_ignore:
-                    if remove_parentheses(b).startswith(crossreflabel):
-                        confirmed = False
-                if confirmed:
-                    confirmed_blocks.append(b)
-                    inputtext = inputtext.replace(b, '---citationblockremoved---')
-            if "doi:" in b or "DOI:" in b or "https://doi.org/" in b:
-                confirmed_blocks.append(b)
-                inputtext = inputtext.replace(b, '---citationblockremoved---')
-                break
     return confirmed_blocks, inputtext
 
 def get_latex_citation_blocks(inputtext):
+    '''
+    return latex-formatted citation formats, and new input text with these removed
+    '''
     confirmed_blocks = []
     for b in get_parenthesised(inputtext, [latexbrackets]):
         confirmed_blocks.append(b)
@@ -346,11 +342,10 @@ def get_searchstring_from_wholecitation(wc):
                 else:
                     return clean_searchstring(x[0])
 
-
 def get_wholereference_citation_blocks(inputtext):
     '''
         finds wholecitations AND doi
-        return a list of citation blocks
+        return a list of citation blocks, and new input text with these removed
     '''
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets]:
@@ -366,71 +361,77 @@ def get_wholereference_citation_blocks(inputtext):
 # parse citation blocks functions
 
 def parse_citation_block(thisblock):
-    thisblock = remove_parentheses(thisblock)
-    thisblock = split_by_delimiter(thisblock)
-    return [x for x in theseids if x not in notfound], notfound
+    results = {
+        'pmids':[],
+        'ids':[],
+        'notfound':[],
+    }
+    theseids = split_by_delimiter(remove_parentheses(thisblock))
+    print (theseids)
+    for thisid in theseids:
+        print ("ok how about this one:",thisid)
+        if thisblock.startswith("\\cite"): #latex formatting
+            print ("it's latex")
+            results['ids'].append(thisid)
+        elif is_pmid(thisid):
+            print ("it's a pmid")
+            results['pmids'].append(thisid.replace("PMID:","").strip())
+        elif is_md(thisid):
+            print ("it's a md")
+            results['ids'].append(thisid.replace("@","").strip())
+        elif is_doi(thisid):
+            print ("it's a doi")
+            # DOI is not an output format. Translate to an output format here (PMID or MD)
+            new_entry = findcitation(thisid.replace("doi:","").strip(), 'doi')
+            if new_entry:
+                results['ids'].append(new_entry['ID'])
+            else:
+                results['notfound'].append(thisid)
+        else:
+            results['notfound'].append(thisid)
+    return results
 
-def parse_id_block(thisblock):
-    ''' take a block of text, and return two lists of ids '''
-    thisblock = remove_parentheses(thisblock)
-    pth = split_by_delimiter(thisblock)
-    pth = [x.replace("@","") for x in pth if x.startswith('@')]
-    theseids = list(set(pth))
-    notfound = bib.cite(theseids)
-    return [x for x in theseids if x not in notfound], notfound
+def casereplace(thistext, catchall, cleanversion):
+    '''
+    replace <catchall> text with <cleanversion> if it occurs at the beginning of the text
+    '''
+    catchall = re.compile("^"+re.escape(catchall.strip()), re.IGNORECASE)
+    return catchall.sub(cleanversion, thistext)
 
-# determine what kind of ID this is
-
-def clean_pmid(putativepmid):
-    for ps in pubmedsearchstrings:
-        putativepmid = putativepmid.replace(ps,'')
-    return putativepmid.strip()
+def clean_id(thisid):
+    thisid = thisid.replace(" ","").strip()
+    for stem in pubmedsearchstrings:
+        thisid = casereplace(thisid, stem, 'PMID:')
+    for stem in mdsearchstrings:
+        thisid = casereplace(thisid, stem, '@')
+    for stem in doisearchstrings:
+        thisid = casereplace(thisid, stem, 'DOI:')
+    return thisid
 
 def is_pmid(x):
-    cx = clean_pmid(x)
-    if x.startswith('PMID'):
-        if len(cx)>0:
-            return True
-    else:
-        try:
-            found = get_article_from_pmid(cx)
-            if str(found['PMID']) == str(cx):
-                return True
-            else:
-                raise ValueError('Error: found more than one PMID for this id: {}'.format(x))
-        except:
-            print ("failed to get pmid:{}".format(x))
-    return False
-
-def clean_doi(putativedoi):
-    putativedoi = putativedoi.replace("DOI:","doi:")
-    putativedoi = putativedoi.replace("https://doi.org/","doi:")
-    putativedoi = putativedoi.replace("doi: ", "doi:")
-    putativedoi = putativedoi.replace("https://doi.org/", "")
-    putativedoi = putativedoi.replace("http://doi.org/", "")
-    return putativedoi
-
-def is_doi(x)
-    if clean_doi(x).startswith('doi:'):
+    x = clean_id(x)
+    print ("x is ", x)
+    if x.startswith('PMID:') and len(x)>5:
         return True
     return False
 
-def parse_doi_block(thisblock):
-    ''' take a block of text, and return two lists of ids '''
-    doistyle = []
-    notdoi = []
-    putativedoi = putativedoi.replace(",", " ")
-    dlist = [x.replace("doi:","") for x in d.split(' ') ]
-    for x in dlist:
-        found = findcitation(x, 'doi')
-        if found is not None:
-            doistyle.append(found['ID'])
-        else:
-            notdoi.append(x)
-    return doistyle, notdoi
+def is_md(x):
+    x = clean_id(x)
+    if x.startswith('@') and len(x)>1:
+        return True
+    return False
+
+def is_doi(x):
+    clean_id(x)
+    if x.startswith('doi:') and len(x)>4:
+        return True
+    return False
 
 askedalready = {}
 def parse_wholecitation_block(thisblock):
+    return [],[]
+
+
     ''' take a block of text, and return two lists of ids '''
     try:
         return askedalready[thisblock]
@@ -461,15 +462,16 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
         return a single bibtex entry
         or None if not found or in doubt
     '''
+    info = str(info.strip())
     if infotype == 'pmid':
         try:
-            # print ("searching for {} in bibdat".format(info))
+            print ("searching for {} in bibdat".format(info))
             return bib.pmids[info]
         except:
-            # print ("{} not found in bib.pmids: ".format(info))
-            # print (bib.pmids.keys())
+            print ("{} not found in bib.pmids: ".format(info))
+            print (bib.pmids.keys())
             pass
-        pub = p2b([str(info)])
+        pub = p2b([info])
         if len(pub) > 0:
             if pub[0] != 'null' and pub[0] != None:
                 print ("PMID:{} found online".format(info))
@@ -491,7 +493,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
                 if pubent[0] != 'null' and pubent[0] != None:
                     bib.new(pubent[0])
                     return pubent[0]
-        print ("doi search failure: {}\nPubmed return: {}".format(info, pub))
+        print ("doi search failure: {} Pubmed return: {}".format(info, pub))
         return None
     elif infotype == 'title':
         if additionalinfo == '':
@@ -521,12 +523,11 @@ Enter y/n".format(pmid, additionalinfo, '\n'.join( ["{:>12}:    {}".format(x,pub
         return None
 
 
-def id2pmid(theseids):
+def id2pmid(theseids, notpmidlist=[]):
     '''
         input is a list of ids
     '''
     pmidlist = []
-    notpmidlist = []
     for thisid in theseids:
         # try to find this id in full_bibdat
         try:
@@ -594,11 +595,16 @@ def format_inline(thisid):
 #------------
 def pmidout(pmidlist, notpmidlist):
     print (pmidlist, notpmidlist, "<===")
-    # add to the outputdatabase
-    bib.cite([bib.pmids[x]['ID'] for x in pmidlist])
     # make a blockstring
     blockstring = ''
     if len(pmidlist) > 0:
+        # add to the outputdatabase if possible but since PMID is the output format, it doesn't matter if we can't find it
+        for x in pmidlist:
+            try:
+                bib.pmids[x]
+            except:
+                continue
+            bib.cite([bib.pmids[x]['ID']])
         blockstring = '[' + ', '.join(["PMID:{}".format(x) for x in pmidlist]) + ']'
         if len(notpmidlist) > 0:
             blockstring += '[*' + ', '.join(notpmidlist) + ']'
@@ -607,13 +613,13 @@ def pmidout(pmidlist, notpmidlist):
     return blockstring
 
 def mdout(theseids, thesemissing=[], outputstyle="md"):
+    if len(theseids) == 0:
+        return 'null'
     # add to the outputdatabase
     bib.cite(theseids)
     # make a blockstring
     blockstring = ''
-    if len(theseids) == 0:
-        blockstring = 'null'
-    elif outputstyle == "md":
+    if outputstyle == "md":
         blockstring += "[{}]".format('; '.join(["@{}".format(x) for x in theseids]))
         if len(thesemissing) > 0:
             blockstring += "[***{}]".format(', '.join(thesemissing))
@@ -638,22 +644,17 @@ def replace_blocks(thistext, outputstyle="md"):
     print ("Number blocks using wholeref:{}".format(len(r)))
     replacedict = {}
     # there are slightly different procedures for each reference type:
-    for b in p:
-        thesepmids, theseothers = parse_citation_block(b)
-        theseids, notfound = pmid2id(thesepmids, theseothers) # ids added to bib
+    for b in p+l:
+        print (b)
+        citedhere = parse_citation_block(b)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+            theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib
+            theseids = list(set(theseids+citedhere['ids']))
             replacedict[b] = mdout(theseids, notfound, outputstyle)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm + notfound)
-        elif outputstyle=='tex' or outputstyle=='inline':
-            replacedict[b] = mdout(theseids, notfound, outputstyle)
-        else:
-            continue
-    for b in l:
-        theseids, notfound = parse_id_block(b)  # ids added to bib
-        if outputstyle=='md' or outputstyle=='inline':
-            replacedict[b] = mdout(theseids, notfound, outputstyle)
+            pm, notpm = id2pmid(citedhere['ids'], citedhere['notfound']) # ids added to bib
+            pm = list(set(pm+citedhere['pmids']))
+            replacedict[b] = pmidout(pm, notpm)
         else:
             continue
     for b in r:
@@ -707,30 +708,6 @@ def search_pubmed(search_string, restrictfields=""):
         return []
     return r['IdList']
 
-def get_links_from_pmid(pmid):
-    try:
-        return Medline.parse(Entrez.elink(dbfrom="pubmed",id=pmid,cmd="prlinks"))
-    except:
-        return []
-
-def get_article_from_pmid(pmid):
-    try:
-        output = Entrez.efetch(db="pubmed", id=pmid, rettype="medline", retmode="text")
-        details = Medline.parse(output)
-        thisarticle = next(details)
-        return thisarticle
-    except:
-        return []
-
-def get_doi_from_pmid(pmid):
-    articledetails = get_article_from_pmid(pmid)
-    doi_list = [string.strip(x.replace('[doi]','')) for x in articledetails['AID'] if x.endswith('[doi]')]
-    if len(doi_list)>0:
-        return doi_list[0]
-    else:
-        raise ValueError('This pmid ({}) was not found.'.format(pmid))
-
-
 # --------------------
 # by Nick Loman
 
@@ -738,7 +715,7 @@ def p2b(pmidlist):
     ''' by Nick Loman '''
 
     if type(pmidlist) != list:
-        pmidlist = [pmidlist]
+        pmidlist = [str(pmidlist)]
 
     ## Fetch XML data from Entrez.
     efetch = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'

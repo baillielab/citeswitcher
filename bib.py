@@ -16,7 +16,7 @@ from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import string_to_latex
 
 additionaldicts = []
-verbose = False
+verbose = True
 
 def init():
     global full_bibdat
@@ -54,14 +54,20 @@ def new(entry):
             entry['ENTRYTYPE']
         except:
             entry['ENTRYTYPE'] = 'article'
+        already_in = False
         try:
             full_bibdat.entries_dict[entry['ID']] # existing full_bibdat entry ALWAYS takes precedence
-            # add any additional fields from online by merging dictionaries
-            entry = {**full_bibdat.entries_dict[entry['ID']], **entry}
+            already_in = True
         except:
             entry = cleanbib(entry)
-        full_bibdat.entries = [entry] + full_bibdat.entries
-        full_bibdat.entries_dict[entry['ID']] = entry
+        if already_in:
+            # add any additional fields from online by merging dictionaries
+            entry = {**full_bibdat.entries_dict[entry['ID']], **entry}
+            full_bibdat.entries_dict[entry['ID']] = entry
+        else:
+            print ("adding entry to bib:\n {}".format(entry['ID']))
+            full_bibdat.entries_dict[entry['ID']] = entry
+            full_bibdat.entries = [entry] + full_bibdat.entries
         for thisdict, thislabel in additionaldicts:
             try:
                 entry[thislabel]
@@ -73,6 +79,8 @@ def new(entry):
                 thisdict[entry[thislabel]] = entry
 
 def cite(theseids):
+    if verbose:
+        print ("bib.cite function has been asked to find:\n",theseids)
     fails = []
     for thisid in theseids:
         try:

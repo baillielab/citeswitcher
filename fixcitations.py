@@ -72,7 +72,7 @@ parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown'
 parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[], help='append as many pandoc formats as you want: pdf docx html txt md')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
 parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
-parser.add_argument('-y', '--yaml',  default="thisfile", help='use this yaml file with pandoc; use "default" for config set one')
+parser.add_argument('-y', '--yaml', default=None, help='use this yaml file with pandoc; use "normal" or "fancy" for config set one')
 parser.add_argument('-i', '--include', action="store_false", default=True, help='do NOT include files')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False, help='use xelatex in pandoc build')
@@ -95,14 +95,17 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
     filestem = '.'.join(filename.split('.')[:-1])
     bibout = os.path.join(outpath, filestem+".bib")
     yamlinstruction = args.filepath
-    if not args.yaml.endswith(".yaml"): # then this isn't a user-defined yaml file. Search config files.
-        configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
-        if os.path.exists(configyamlpath):
-            yamlinstruction = configyamlpath
+    if args.yaml:
+        if not args.yaml.endswith(".yaml"): # then this isn't a user-defined yaml file. Search config files.
+            configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
+            if os.path.exists(configyamlpath):
+                yamlinstruction = configyamlpath
         else:
-            print ("YAML file ({}) not found.\nProceeding with in-file YAML.".format(configyamlpath))
-    else: # read user-specified yaml file
-        yamlinstruction = os.path.abspath(os.path.join(outpath, args.yaml))
+            specyamlpath = os.path.abspath(os.path.join(outpath, args.yaml))
+            if os.path.exists(specyamlpath): # read user-specified yaml file
+                yamlinstruction = specyamlpath
+            else:
+                print ("YAML file ({}) not found.\nProceeding with in-file YAML.".format(configyamlpath))
     yamldata = citefunctions.getyaml(yamlinstruction, do_includes=args.include)
     if 'bibliography' in yamldata.keys():
         bibout = yamldata['bibliography']

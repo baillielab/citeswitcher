@@ -368,15 +368,17 @@ def parse_citation_block(thisblock):
     }
     theseids = split_by_delimiter(remove_parentheses(thisblock))
     for thisid in theseids:
+        thisid = clean_id(thisid)
+        print (thisid)
         if thisblock.startswith("\\cite"): #latex formatting
             results['ids'].append(thisid)
-        elif is_pmid(thisid):
+        elif thisid.startswith('PMID:') and len(thisid)>5:
             results['pmids'].append(thisid.replace("PMID:","").strip())
-        elif is_md(thisid):
+        elif thisid.startswith('@') and len(thisid)>1:
             results['ids'].append(thisid.replace("@","").strip())
-        elif is_doi(thisid):
+        elif thisid.startswith('DOI:') and len(thisid)>4:
             # DOI is not an output format. Translate to an output format here (PMID or MD)
-            new_entry = findcitation(thisid.replace("doi:","").strip(), 'doi')
+            new_entry = findcitation(thisid.replace("DOI:","").strip(), 'doi')
             if new_entry:
                 results['ids'].append(new_entry['ID'])
             else:
@@ -401,24 +403,6 @@ def clean_id(thisid):
     for stem in doisearchstrings:
         thisid = casereplace(thisid, stem, 'DOI:')
     return thisid
-
-def is_pmid(x):
-    x = clean_id(x)
-    if x.startswith('PMID:') and len(x)>5:
-        return True
-    return False
-
-def is_md(x):
-    x = clean_id(x)
-    if x.startswith('@') and len(x)>1:
-        return True
-    return False
-
-def is_doi(x):
-    clean_id(x)
-    if x.startswith('doi:') and len(x)>4:
-        return True
-    return False
 
 askedalready = {}
 def parse_wholecitation_block(thisblock):
@@ -477,16 +461,17 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
         try:
             return bib.dois[info]
         except:
-            pass
-        print ("this is a doi: {}".format(info))
+            print ("DOI not in bib file: {}".format(info))
+        print ("searching pubmed to find this doi: {}".format(info))
         pub = search_pubmed(info, "doi")
         if len(pub) == 1:
             pubent = p2b(pub[0])
             if len(pubent) > 0:
                 if pubent[0] != 'null' and pubent[0] != None:
+                    print ("pubmed output:", pubent)
                     bib.new(pubent[0])
                     return pubent[0]
-        print ("doi search failure: {} Pubmed return: {}".format(info, pub))
+        print ("doi not found in pubmed: {} Pubmed return: {}".format(info, pub))
         return None
     elif infotype == 'title':
         if additionalinfo == '':
@@ -700,7 +685,6 @@ def search_pubmed(search_string, restrictfields=""):
     return r['IdList']
 
 # --------------------
-# by Nick Loman
 
 def p2b(pmidlist):
     ''' by Nick Loman '''

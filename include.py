@@ -85,12 +85,13 @@ def include_excel(excelfile):
 
     # BUDGET
     df = pd.read_excel(excelfile, index_col=0, dtype=str)
+    print (df)
     for colname in df.columns:
         if colname.startswith('#'):
             df = df.drop(colname, axis=1)
         if "£" in colname:
             df[colname] = pd.to_numeric(df[colname])
-            df[colname] = df[colname].map("£{0:.2f}".format)
+            df[colname] = df[colname].map("£{0:,.2f}".format)
     # format number
     for thiscol in []:
         df[thiscol] = df[thiscol].map("{}".format)
@@ -126,7 +127,9 @@ def parse_includes(thisfile, verbose=False):
                 if not filepath.endswith('.xlsx'): # don't try to read excel directly
                     newtext = parse_includes(filepath)
             else:
-                print ("\n\n*** INCLUDE FILE NOT FOUND: {} ***\n\n".format(filepath))
+                print ("\n\n*** INCLUDE FILE NOT FOUND: ***\n{}".format(filepath))
+                print ("*** path: {} ***".format(os.path.abspath(filepath)))
+                print ("*** cwd: {} ***\n".format(os.getcwd()))
                 continue
             for inc in includes:
                 if includes[inc] == filepath:

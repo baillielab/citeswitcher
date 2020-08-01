@@ -94,19 +94,19 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         citefunctions.check_dir(pandocoutpath)
     filestem = '.'.join(filename.split('.')[:-1])
     bibout = os.path.join(outpath, filestem+".bib")
-    yamlinstruction = ""
-    if args.yaml == "default":
-        yamlinstruction = os.path.abspath(os.path.join(scriptpath, config['yamlfile']))
-        yamlsource = yamlinstruction
-    elif args.yaml == "thisfile":
-        yamlsource = args.filepath
-    else:
+    yamlinstruction = args.filepath
+    if not args.yaml.endswith(".yaml"): # then this isn't a user-defined yaml file. Search config files.
+        configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
+        if os.path.exists(configyamlpath):
+            yamlinstruction = configyamlpath
+        else:
+            print ("YAML file ({}) not found.\nProceeding with in-file YAML.".format(configyamlpath))
+    else: # read user-specified yaml file
         yamlinstruction = os.path.abspath(os.path.join(outpath, args.yaml))
-        yamlsource = yamlinstruction
-    yamldata = citefunctions.getyaml(yamlsource, do_includes=args.include)
+    yamldata = citefunctions.getyaml(yamlinstruction, do_includes=args.include)
     if 'bibliography' in yamldata.keys():
         bibout = yamldata['bibliography']
-        print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
+        print ('using yaml-specified bib from {}: {}'.format(yamlinstruction, yamldata['bibliography']))
         yamlbib = True
     bibout = os.path.abspath(bibout)
 #-------------------
@@ -193,6 +193,11 @@ print ("Word count:", wordcount.wordcount(text))
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 if input_file_extension in ['md', 'markdown']:
     text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
+    # check for "# References" header or equivalent
+    lines = text.strip().replace("\r","\n").split("\n")
+    if not lines[-1].startswith("#") and not lines[-1].startswith("="):
+        # then the last line isn't a header, so add one.
+        text += "\n\n\n# References"
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------

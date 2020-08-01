@@ -3,7 +3,7 @@
     "zotero_bibfile": "~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.bib",
     "default_bibfile": "~/Dropbox/2_proposals_and_publications/5_BIBLIOGRAPHY/lib.pmid.bib",
     "email": "bio.entrez@sidies.com",
-    "yamlfile": "{{scriptpath}}default.yaml",
+    "yamldir": "{{scriptpath}}yaml_files/",
     "testfile": "{{scriptpath}}test/eme.txt",
     "cslfile": "{{scriptpath}}sup-files/csl/nature.csl",
     "imagedir": "img",

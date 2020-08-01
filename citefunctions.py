@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import json
+import select
 import difflib
 import calendar
 import requests
@@ -59,7 +60,6 @@ curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
 #-------------
-#-------------
 pubmedsearchstrings = ["PMID", "pmid:", "PubMed:", "Pubmed", "pubmed"]
 #-------------
 class cd:
@@ -100,7 +100,8 @@ def callpandoc(f, out_ext, out_dir='', args="", yaml="", x=False):
     if x:
         cmd += " --pdf-engine=xelatex "
     if out_ext in ['.md','.txt']:
-        cmd += "  -t markdown-citations -t markdown-strict "
+        #cmd += "  -t markdown-citations -t markdown-strict "
+        cmd += "  -t markdown-citations "
     else:
         if out_ext not in ['.html']:
             cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT/HTML OUT
@@ -455,7 +456,7 @@ def parse_wholecitation_block(thisblock):
 
 #------------
 
-def findcitation(info, infotype='pmid', additionalinfo='', ):
+def findcitation(info, infotype='pmid', additionalinfo=''):
     '''
         search the bibdat first
         search online in a variety of ways
@@ -505,17 +506,21 @@ def findcitation(info, infotype='pmid', additionalinfo='', ):
             pubent = p2b(pmid)
             if len(pubent) > 0:
                 if pubent[0] != 'null' and pubent[0] != None:
-                    q = input ("--------------\n\
+                    question = "--------------\n\
 Reference block (PMID:{}) found. \
 Please check that input:\n\n{}\n\n\
-Is the same as the found citation:\n{}\n\n\
-Enter y/n\
-                        ".format(pmid, additionalinfo, '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0]]) ))
-                    q = q.strip().upper()
-                    if q == "Y":
-                        print ('--confirmed--')
-                        bib.new(pubent[0])
-                        return pubent[0]
+Is the same as the found citation:\n\n{}\n\n\
+Enter y/n".format(pmid, additionalinfo, '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0]]) )
+                    #q = input (question)
+                    print (question)
+                    i,o,e = select.select([sys.stdin],[],[],5) # 5 second timeout
+                    if i:
+                        q = sys.stdin.readline().strip()
+                        q = q.strip().upper()
+                        if q == "Y":
+                            print ('--confirmed--')
+                            bib.new(pubent[0])
+                            return pubent[0]
         return None
 
 

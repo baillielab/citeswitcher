@@ -1,0 +1,9 @@
+---
+numbersections: false
+link-citations: true
+toc: false
+urlcolor: teal
+figPrefix: Figure
+eqnPrefix: Equation
+tblPrefix: Table
+...

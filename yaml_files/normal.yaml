@@ -2,7 +2,11 @@
 numbersections: false
 link-citations: true
 toc: false
-urlcolor: teal
+urlcolor: blue
+linkcolor: blue
+citecolor: blue
+figureTitle: Figure
+tableTitle: Table
 figPrefix: Figure
 eqnPrefix: Equation
 tblPrefix: Table

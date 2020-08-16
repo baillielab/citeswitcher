@@ -60,9 +60,8 @@ def get_includes(thistext):
         if "INCLUDESECTION" in x and not "#INCLUDESECTION" in x:
             includedict[x] = get_filename(x)
     for x in re.findall(md_include_format, thistext):
-        includedict[x] = x[2:-2].strip()
+        includedict[x] = filepath = os.path.normpath(os.path.expanduser(x[2:-2].strip()))
     return includedict
-
 
 def clear_nan(thisdf):
     thisdf = thisdf.replace('£nan', '', regex=True)
@@ -120,10 +119,10 @@ def parse_includes(thisfile, verbose=False):
         additionalfiles = list(set(includes.values()))
         if verbose:
             print ("[include.py] working in: {}".format(filedir))
-            print ("[include.py] adding", additionalfiles)
         for filepath in additionalfiles:
-            filepath = os.path.normpath(filepath)
             if os.path.exists(filepath):
+                if verbose:
+                    print ("[include.py] including:", filepath)
                 if not filepath.endswith('.xlsx'): # don't try to read excel directly
                     newtext = parse_includes(filepath)
             else:
@@ -141,8 +140,8 @@ def parse_includes(thisfile, verbose=False):
 def stripcomments(thistext):
     return re.sub(comments, "", thistext)
 
-def save_new(thisfile, outputfile="auto", stripc=False):
-    text = parse_includes(thisfile)
+def save_new(thisfile, outputfile="auto", stripc=False, verbose=False):
+    text = parse_includes(thisfile, verbose=verbose)
     if outputfile == 'auto':
         outputfile = preext(thisfile, 'inc')
     if stripc:
@@ -163,8 +162,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filename', default=None,   help='filename')
     parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
+    parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
     args = parser.parse_args()
-    save_new(args.filename, outputfile="auto", stripc = args.stripcomments)
+    save_new(args.filename, outputfile="auto", stripc = args.stripcomments, verbose=args.verbose)
 
 
 

@@ -3,7 +3,7 @@
 # encoding: utf-8
 
 '''
-find all capitalised abbreviations in a text file
+	find all capitalised abbreviations in a text file
 '''
 
 #-------------------
@@ -13,7 +13,7 @@ import re
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
-# - essential
+# - essential
 parser.add_argument('-f', '--filepath',    help='filepath')
 args = parser.parse_args()
 #-------------------

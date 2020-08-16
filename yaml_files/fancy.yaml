@@ -10,7 +10,12 @@ header-includes: |
     \fancyhead[CO,CE]{}
     \fancyfoot[CO,CE]{}
     \fancyfoot[LE,RO]{\thepage}
+figureTitle: Figure
+tableTitle: Table
 figPrefix: Figure
 eqnPrefix: Equation
 tblPrefix: Table
+urlcolor: teal
+linkcolor: blue
+citecolor: blue
 ...

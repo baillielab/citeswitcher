@@ -1,0 +1,13 @@
+---
+numbersections: false
+link-citations: true
+toc: false
+urlcolor: blue
+linkcolor: blue
+citecolor: blue
+figureTitle: Supplementary Figure
+tableTitle: Supplementary Table
+figPrefix: Supplementary Figure
+eqnPrefix: Supplementary Equation
+tblPrefix: Supplementary Table
+...

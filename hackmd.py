@@ -20,6 +20,8 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--direct',    help='enter direct hackmd link')
 parser.add_argument('-c', '--chosendirs',    action='append', default=[], help='chosen directory names')
+parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
+parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
 args = parser.parse_args()
 #-----------------------------
 outputformats = [
@@ -33,13 +35,6 @@ archive_dir = "archive"
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 config = citefunctions.getconfig(os.path.join(scriptpath, 'config.json'))
 #-----------------------------
-path_to_python = "python"
-try:
-    path_to_python = config['pathstopython'][platform.system()]
-except:
-    pass
-print ("OS={} pathtopython={}".format(platform.system(), path_to_python))
-#-----------------------------
 class cd:
     def __init__(self, newPath):
         self.newPath = os.path.expanduser(newPath)
@@ -49,23 +44,20 @@ class cd:
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
 #-----------------------------
-def run_pandoc(thispath, thisfile, fixrefs=True):
-    if fixrefs:
-        # run fix citations in messy mode
-        cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py -l -f {} -m {}'.format(
-            path_to_python,
-            os.path.join(thispath, thisfile),
-            " ".join(["-p "+x.replace(".","") for x in outputformats])
-            )
-        print (cmd)
-        subprocess.call(cmd, shell=True)
-    else:
-        # just run pandoc
-        with cd(thispath):
-            for ext in (outputformats):
-                cmd = 'pandoc {} -o {}'.format(thisfile, thisfile.replace(".md",ext))
-                print (cmd)
-                subprocess.call(cmd, shell=True)
+def make_output(thispath, thisfile, pathtopandoc=args.pathtopandoc):
+    # run fix citations in messy mode
+    extra_args = "-x " # -x indicates xelatex mode. Handles special characters. Crashes sid.
+    if args.localbibonly:
+        extra_args += (" -l")
+    cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py {} -f {} -m {} -ptp {}'.format(
+        sys.executable,
+        extra_args,
+        os.path.join(thispath, thisfile),
+        " ".join(["-p "+x.replace(".","") for x in outputformats]),
+        pathtopandoc
+        )
+    print (cmd)
+    subprocess.call(cmd, shell=True)
 #-----------------------------
 if args.direct:
     args.direct = args.direct.replace("/edit", "")
@@ -73,7 +65,7 @@ if args.direct:
     cmd = 'wget {}/download -O {}'.format(args.direct, dfile)
     print (cmd)
     subprocess.call(cmd, shell=True)
-    run_pandoc(dfile)
+    make_output(dfile)
 else:
     hackmd = os.path.expanduser(config['hackmddir'])
     with cd(hackmd):
@@ -104,7 +96,7 @@ else:
                 print (cmd)
                 subprocess.call(cmd, shell=True)
 
-                run_pandoc(thispath, mdfile)
+                make_output(thispath, mdfile)
 
 
 

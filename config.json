@@ -8,8 +8,6 @@
     "cslfile": "{{scriptpath}}sup-files/csl/nature.csl",
     "imagedir": "img",
     "outputsubdirname": "",
-    "linux_home": "/home/kbaillie/",
-    "mac_home": "/Users/jkb/",
     "custom_find_replace":
         {
             "a2aa": "$\\alpha_2$-agonist"
@@ -18,10 +16,5 @@
         {
             "a2aa": "$\\alpha_2$-agonist"
         },
-    "hackmddir":"~/Dropbox/Apps/hackmd",
-    "pathstopython":
-        {
-            "Linux":"~/anaconda3/envs/jkb37/bin/python",
-            "Darwin":"/miniconda3/envs/jkb37/bin/python"
-        }
+    "hackmddir":"~/Dropbox/Apps/hackmd"
 }

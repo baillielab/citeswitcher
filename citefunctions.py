@@ -54,15 +54,23 @@ markdown_labels_to_ignore = [
     ]
 #-------------
 #regexes
-squarebrackets = '\[[\s\S]+?\]'
+squarebrackets = '\[[\s\S]+?\]' #'[^!]\[[^!][\s\S]+?\]'# '\[[\s\S]+?\]'
+curlybrackets = '\{[\s\S]+?\}' #'\{[[^!]\s\S]+?\}'
 commentedsquarebrackets = '<!--\[[\s\S]+?\]-->'
-curlybrackets = '\{[\s\S]+?\}'
 roundbrackets = '\([\s\S]+?\)'
 latexbrackets = '\\\cite\{[\s\S]+?\}'
 #-------------
 pubmedsearchstrings = ["PMID:", "PubMed:"]
 mdsearchstrings = ["@"]
-doisearchstrings = ["doi:", "https://doi.org/", "http://doi.org/"]
+doisearchstrings = [
+            "doi:",
+            "https://doi.org/",
+            "http://doi.org/",
+            "http://dx.doi.org/",
+            "https://dx.doi.org/",
+        ]
+#-------------
+no_user_response_count = 0
 #-------------
 class cd:
     """Context manager for changing the current working directory"""
@@ -97,9 +105,14 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
-def callpandoc(f, out_ext, out_dir='', args="", yaml="", x=False):
-    cmd = 'pandoc --atx-headers {} --filter pandoc-crossref --filter pandoc-citeproc {} {} -o {} '.format(
-            args,
+def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, pathtopandoc="pandoc"):
+    # crossref must come before citeproc
+    # entire yaml file is pre-pended to the main file
+    cmd = '{} --atx-headers --filter {}-crossref --filter {}-citeproc {} {} {} -o {} '.format(
+            pathtopandoc,
+            pathtopandoc,
+            pathtopandoc,
+            pargs,
             yaml,
             f,
             os.path.join(out_dir, newext(f, out_ext))
@@ -327,21 +340,21 @@ def get_latex_citation_blocks(inputtext):
     return confirmed_blocks, inputtext
 
 def clean_searchstring(this_string):
-    dirtychars = ['“','”','`']
+    dirtychars = ['“','”','`','‘','’']
     for d in dirtychars:
         this_string = this_string.replace(d,'')
-    return this_string
+    return this_string.strip()
 
 def get_searchstring_from_wholecitation(wc):
     '''
         return the longest sentence that doesn't look like a list of authors or a citation
     '''
-    authorsep = '[A-Z], [A-Z]' # regex for [capital, comma, space, capital]
+    authorsep = '[A-Z, a-z, .], [A-Z]' # regex for [capital, comma, space, capital]
     lendict = {x:len(x) for x in remove_parentheses(wc).split('.')}
     for x in sorted(iter(lendict.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True):
         if len(x[0]) > 0:
             authoriness = float(len(re.findall(authorsep, x[0]))/len(x[0]))
-            if authoriness < 0.02:
+            if authoriness < 0.01:
                 if ":" in x[0] and ";" in x[0]: # probably not a title
                     continue
                 else:
@@ -410,31 +423,27 @@ def clean_id(thisid):
 
 askedalready = {}
 def parse_wholecitation_block(thisblock):
-    return [],[]
-
-
     ''' take a block of text, and return two lists of ids '''
     try:
         return askedalready[thisblock]
     except:
         outids = []
         # try a doi search first in case there's a doi in there
-        d = parse_doi_block(thisblock)[0]
-        if len(d)>0:
-            outids = d
+        d = parse_citation_block(thisblock)
+        if len(d['ids'])>0:
+            print ("untested: returning ids:", d['ids'])
+            outids = d['ids']
         else:
             # if that doesn't work, try a title search
             title = get_searchstring_from_wholecitation(thisblock)
-            print ("searching pubmed for this title:\n\t", title)
-            found = findcitation(title, 'title', additionalinfo=thisblock)
-            print ("title:", title, found)
-            if found is not None:
-                outids.append(found['ID'])
+            if title is not None:
+                found = findcitation(title, 'title', additionalinfo=thisblock)
+                if found is not None:
+                    outids.append(found['ID'])
         askedalready[thisblock] = outids, []
         return outids, []  # there is only ever one
 
 #------------
-
 def findcitation(info, infotype='pmid', additionalinfo=''):
     '''
         search the bibdat first
@@ -443,6 +452,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
         return a single bibtex entry
         or None if not found or in doubt
     '''
+    global no_user_response_count
     info = str(info.strip())
     if infotype == 'pmid':
         try:
@@ -450,7 +460,6 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
             return bib.pmids[info]
         except:
             print ("{} not found in bib.pmids: ".format(info))
-            print (bib.pmids.keys())
             pass
         pub = p2b([info])
         if len(pub) > 0:
@@ -462,25 +471,27 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
         print ("PMID:{} NOT FOUND ON PUBMED".format(info))
         return None
     elif infotype == 'doi':
+        msg=""
         try:
             return bib.dois[info]
         except:
-            print ("DOI not in bib file: {}".format(info))
-        print ("searching pubmed to find this doi: {}".format(info))
+            msg += ("DOI not in bib file: {}".format(info))
         pub = search_pubmed(info, "doi")
         if len(pub) == 1:
             pubent = p2b(pub[0])
             if len(pubent) > 0:
                 if pubent[0] != 'null' and pubent[0] != None:
-                    print ("pubmed output:", pubent)
+                    print (msg + "but found in pubmed: {}".format(pubent[0]))
                     bib.new(pubent[0])
                     return pubent[0]
-        print ("doi not found in pubmed: {} Pubmed return: {}".format(info, pub))
+        print (msg + ", nor in pubmed")
         return None
     elif infotype == 'title':
-        if additionalinfo == '':
-            additionalinfo = title
+        if no_user_response_count > 2:
+            print ("No user response to previous 3 queries. Running in silent mode.")
+            return None
         # should add code to search bibdat for title here ***TODO***
+        print ("searching pubmed for this title:\t{}".format(info))
         pub = search_pubmed(info, "title")
         if len(pub) == 1:
             pmid = pub[0]
@@ -488,13 +499,20 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
             if len(pubent) > 0:
                 if pubent[0] != 'null' and pubent[0] != None:
                     question = "--------------\n\
-Reference block (PMID:{}) found. \
-Please check that input:\n\n{}\n\n\
-Is the same as the found citation:\n\n{}\n\n\
-Enter y/n".format(pmid, additionalinfo, '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0]]) )
+New citation (PMID:{}) found in Pubmed. Please check that input is the same as the found citation for this reference block: \n\
+\n{}\n\n{}\n{}\n\n{}\n\n\
+Enter y/n within 10 seconds".format(
+                        pmid,
+                        additionalinfo,
+                        "{:>12}:    {}".format('Input Title', info),
+                        "{:>12}:    {}".format('Found Title', pubent[0]['Title']),
+                        '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0] if x != "Title"])
+                        )
                     #q = input (question)
                     print (question)
-                    i,o,e = select.select([sys.stdin],[],[],5) # 5 second timeout
+                    i,o,e = select.select([sys.stdin],[],[],10) # 10 second timeout
+                    if i==[] and o==[] and e==[]:
+                        no_user_response_count += 1
                     if i:
                         q = sys.stdin.readline().strip()
                         q = q.strip().upper()
@@ -648,9 +666,9 @@ def replace_blocks(thistext, outputstyle="md"):
             continue
     for b in replacedict:
         if replacedict[b] == 'null':
-            print ("{:>70} left alone".format(b))
+            print ("{:>80} ... left alone".format(b))
             continue
-        print ("{:>70} ==> {}".format(b, replacedict[b]))
+        print ("{:>80} ==> {}".format(b, replacedict[b]))
         thistext = thistext.replace(b, replacedict[b])
     return thistext
 

@@ -12,8 +12,6 @@ references in square [] or curly {} or round brackets will be searched for PMID
 
 If there is a mixture of reference types in one set of parentheses, ids with the format PMID:NNNNN will be handled correctly but spaces etc will be ignored.
 
-
-
 The default or specified .bib file will then be searched for the relevant citations.
 Citations will be replaced with a citaion in either .md or .tex or PMID format.
 
@@ -65,27 +63,38 @@ config = citefunctions.getconfig(os.path.join(scriptpath, 'config.json'))
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
-# - essential
-parser.add_argument('-f', '--filepath',    help='filepath', default=config['testfile'])
-parser.add_argument('-o', '--outputstyle',    type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
-# - optional
-parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[], help='append as many pandoc formats as you want: pdf docx html txt md')
-parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
-parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
-parser.add_argument('-y', '--yaml', default='choose', help='use this yaml file with pandoc; use "normal" or "fancy" for config set one; "choose" indicates that normal will be used only if there is no yaml in the current file')
-parser.add_argument('-i', '--include', action="store_false", default=True, help='do NOT include files')
-parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
-parser.add_argument('-x', '--xelatex', action="store_true", default=False, help='use xelatex in pandoc build')
-parser.add_argument('-r', '--customreplace', action="store_true", default=False, help='run custom find/replace commands specified in config file')
-parser.add_argument('-redact', '--redact', action="store_true", default=False, help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
-parser.add_argument('-m', '--messy', action="store_true", default=False, help='disable clean up of intermediate files')
-parser.add_argument('-d', '--outputsubdir',    help='outputdir - always a subdir of the working directory', default=config['outputsubdirname'])
-parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['default_bibfile'])
-parser.add_argument('-c', '--cslfile',    help='csl citation styles file', default=config['cslfile'])
-parser.add_argument('-img', '--imagedir',    help='imagedirectoryname', default=config['imagedir'])
+#---- essential arguments
+parser.add_argument('-f', '--filepath', default=None,                               help='filepath') # - *** essential ***
+#---- additional files to specify
+parser.add_argument('-b', '--bibfile', default=config['default_bibfile'],           help='bibfile')
+parser.add_argument('-c', '--cslfile', default=config['cslfile'],                   help='csl citation styles file', )
+parser.add_argument('-y', '--yaml', default='choose',                               help='use this yaml file with pandoc; use "normal" or "fancy"\
+                    for config set one; the default, "choose", indicates that normal will be used only if there is no yaml in the current file')
+#---- other options
+parser.add_argument('-l', '--localbibonly', action="store_true", default=False,     help='use only local bib file')
+parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory', )
+parser.add_argument('-img', '--imagedir', default=config['imagedir'],               help='imagedirectoryname')
+parser.add_argument('-i', '--include', action="store_false", default=True,          help='do NOT include files')
+parser.add_argument('-m', '--messy', action="store_true", default=False,            help='disable clean up of intermediate files')
+parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
+parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
+parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],          help='append as many pandoc formats as you want: pdf docx html txt md tex')
+parser.add_argument('-lt', '--latex_template', default='', help='a latex template to be passed to pandoc')
+parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
+parser.add_argument('-r', '--customreplace', action="store_true", default=False,    help='run custom find/replace commands specified in config file')
+parser.add_argument('-redact', '--redact', action="store_true", default=False,      help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
+parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
+parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
+parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
 args = parser.parse_args()
 #-------------------
-args.filepath = os.path.abspath(os.path.expanduser(args.filepath))
+if args.filepath:
+    args.filepath = os.path.abspath(os.path.expanduser(args.filepath))
+else:
+    print ("\nNo input file specified. Try a test file using this command:")
+    print ("python fixcitations.py -f {} -o md".format(os.path.abspath(config['testfile'])))
+    print ("and navigate to this directory to see the output: {}\n".format(os.path.split(config['testfile'])[0]))
+    sys.exit()
 with citefunctions.cd(os.path.split(args.filepath)[0]):
     args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
     outpath, filename = os.path.split(args.filepath)
@@ -169,7 +178,7 @@ if args.verbose:
 #-------------------
 bib.db = citefunctions.read_bib_files([bibout])
 if args.localbibonly:
-    if args.verbose: print ("reading localbibonly", bibout)
+    print ("\n*** reading local bib file only: {} ***\n".format(bibout))
     bib.full_bibdat = bib.db
 else:
     if args.verbose: print ("reading bibfiles:", args.bibfile, bibout)
@@ -180,7 +189,7 @@ bib.make_alt_dicts()
 text = citefunctions.replace_blocks(text, args.outputstyle)
 #-----------------
 # save remote bibliography
-print ('saving remote bibliography for this file here:', bibout)
+print ('\nsaving remote bibliography for this file here:', bibout)
 with open(bibout, 'w') as bf:
     bibtexparser.dump(bib.db, bf)
 #-----------------
@@ -194,17 +203,18 @@ if len(bib.newpmids)>0:
 if args.customreplace:
     text = citefunctions.findreplace(text, config['custom_find_replace'])
 #-----------------
-print ("Word count:", wordcount.wordcount(text))
+print ("Word count: {}\n".format(wordcount.wordcount(text)))
 #-----------------
 # save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 if input_file_extension in ['md', 'markdown']:
     text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
     # check for "# References" header or equivalent
-    lines = text.strip().replace("\r","\n").split("\n")
+    lines = text.replace("\r","\n").strip().split("\n")
     if not lines[-1].startswith("#") and not lines[-1].startswith("="):
         # then the last line isn't a header, so add one.
-        text += "\n\n\n# References"
+        if len(bib.db.entries) > 0:
+            text += "<!--automatically added by fixcitations-->\n\n\n# References"
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------
@@ -216,7 +226,19 @@ if len(args.pandoc_outputs)>0:
     if yamlsource != args.filepath:
         yamlinstruction = yamlsource #NB this is concatenated with the input file by pandoc
     for thisformat in args.pandoc_outputs:
-        citefunctions.callpandoc(filename, '.{}'.format(thisformat), yaml=yamlinstruction, out_dir=pandocoutpath, x=args.xelatex)
+        pargstring = ""
+        if thisformat == "pdf" or thisformat =="tex":
+            if len(args.latex_template)>0:
+                pargstring+="--template {}".format(args.latex_template)
+                args.xelatex = True
+        citefunctions.callpandoc(filename,
+                    '.{}'.format(thisformat),
+                    pargs=pargstring,
+                    yaml=yamlinstruction,
+                    out_dir=pandocoutpath,
+                    x=args.xelatex,
+                    pathtopandoc=args.pathtopandoc
+                    )
     if len(args.pandoc_outputs)>0 and not args.messy:
         #then clean up because the intermediate files are probably not wanted
         cmd = "rm {}".format(outputfile)

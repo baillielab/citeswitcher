@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--direct',    help='enter direct hackmd link')
 parser.add_argument('-c', '--chosendirs',    action='append', default=[], help='chosen directory names')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
+parser.add_argument('-img', '--convertimages', action="store_true", default=False, help='automatically convert images')
 parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
 args = parser.parse_args()
 #-----------------------------
@@ -43,10 +44,26 @@ class cd:
         os.chdir(self.newPath)
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
+
 #-----------------------------
+def svg2pdf(thisdir):
+    with open(os.path.join(thisdir, "__README.txt"),"w") as o:
+        o.write("Any saved svg files in this directory will be automatically converted to pdf")
+        o.write("NB pdf files with the same name as an svg will be **OVERWRITTEN**")
+    cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/svg2pdf.py -d {} -o'.format(
+        sys.executable,
+        thisdir
+        )
+    print (cmd)
+    subprocess.call(cmd, shell=True)
+
 def make_output(thispath, thisfile, pathtopandoc=args.pathtopandoc):
+    # if img dir exists, overwrite pdfs
+    imgdir = os.path.join(thispath, "img")
+    if os.path.exists(imgdir) and args.convertimages:
+        svg2pdf(imgdir)
     # run fix citations in messy mode
-    extra_args = "-x " # -x indicates xelatex mode. Handles special characters. Crashes sid.
+    extra_args = "-x -pm" # -x indicates xelatex mode. Handles special characters. Crashes sid.
     if args.localbibonly:
         extra_args += (" -l")
     cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py {} -f {} -m {} -ptp {}'.format(
@@ -58,6 +75,7 @@ def make_output(thispath, thisfile, pathtopandoc=args.pathtopandoc):
         )
     print (cmd)
     subprocess.call(cmd, shell=True)
+
 #-----------------------------
 if args.direct:
     args.direct = args.direct.replace("/edit", "")

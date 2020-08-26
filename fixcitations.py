@@ -79,8 +79,9 @@ parser.add_argument('-m', '--messy', action="store_true", default=False,        
 parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
 parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
 parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],          help='append as many pandoc formats as you want: pdf docx html txt md tex')
+parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False,    help='use pandoc-mermaid-filter')
 parser.add_argument('-lt', '--latex_template', default='', help='a latex template to be passed to pandoc')
-parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
+parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired') # e.g. a letter format
 parser.add_argument('-r', '--customreplace', action="store_true", default=False,    help='run custom find/replace commands specified in config file')
 parser.add_argument('-redact', '--redact', action="store_true", default=False,      help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
@@ -229,7 +230,10 @@ if len(args.pandoc_outputs)>0:
         pargstring = ""
         if thisformat == "pdf" or thisformat =="tex":
             if len(args.latex_template)>0:
-                pargstring+="--template {}".format(args.latex_template)
+                pargstring+="--template {}".format(args.latex_template) # e.g. a letter format
+                args.xelatex = True
+            if args.pandoc_mermaid:
+                pargstring+="--filter pandoc-mermaid"
                 args.xelatex = True
         citefunctions.callpandoc(filename,
                     '.{}'.format(thisformat),

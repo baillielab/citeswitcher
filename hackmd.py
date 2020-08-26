@@ -63,7 +63,9 @@ def make_output(thispath, thisfile, pathtopandoc=args.pathtopandoc):
     if os.path.exists(imgdir) and args.convertimages:
         svg2pdf(imgdir)
     # run fix citations in messy mode
-    extra_args = "-x -pm" # -x indicates xelatex mode. Handles special characters. Crashes sid.
+    extra_args = "-x "
+    # -x indicates xelatex mode. Handles special characters. Crashes sid.
+    # -pm indicates that pandoc mermaid is used
     if args.localbibonly:
         extra_args += (" -l")
     cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py {} -f {} -m {} -ptp {}'.format(

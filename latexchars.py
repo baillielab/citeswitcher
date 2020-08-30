@@ -1,7 +1,7 @@
 import string
 
 lc1 = [
-    [" ", " "],
+    [" ", " "],
     [" ", " "],
     ["!", "!"],
     ["!'", "¡"],
@@ -2975,9 +2975,19 @@ lc2 = [
 
 def replace_accents(thistext, mode="biblatex"):
     if mode=="biblatex":
-        switchlatex = {x[1]:x[0] for x in lc2}
+        sourcedict = lc2
     elif mode=="latex":
-        switchlatex = {x[1]:x[0] for x in lc1}
+        sourcedict = lc1
+    switchlatex = {}
+    for x in sourcedict:
+        try:
+            switchlatex[x[1]]
+        except:
+            switchlatex[x[1]] = x[0]
+            continue
+        #take the shorter string
+        if len(x[0]) < len(switchlatex[x[1]]):
+            switchlatex[x[1]] = x[0]
     allchars = set(list(thistext))
     nonprintable = allchars - set(string.printable)
     for char in nonprintable:

@@ -34,7 +34,7 @@ outputformats = [
 archive_dir = "archive"
 #-----------------------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
-config = citefunctions.getconfig(os.path.join(scriptpath, 'config.json'))
+config = citefunctions.getconfig()
 #-----------------------------
 class cd:
     def __init__(self, newPath):

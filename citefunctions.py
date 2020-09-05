@@ -30,7 +30,12 @@ import include
 #-------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 #-------------
-def getconfig(cfgfile):
+def getconfig(cfgfile=""):
+    cfgfile = "null"
+    for cfgname in ['config_local.json', "config.json"]:
+        cfgfile = os.path.join(scriptpath, cfgname)
+        if os.path.exists(cfgfile):
+            break
     with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
     for item in data:
@@ -45,6 +50,9 @@ def getconfig(cfgfile):
         Entrez.tool = data['toolname']
     except:
         pass
+    if "@" not in data['email']:
+        print ("No email in config file: {}".format(cfgfile))
+        sys.exit()
     return data
 #-------------
 markdown_labels_to_ignore = [
@@ -162,7 +170,9 @@ def sort_db(thisdb, sortby="year"):
     thisdb.entries = [thisdb.entries_dict[thisid] for thisid in theseids]
 
 #-------------
-def findreplace(inputtext, frdict):
+def findreplace(inputtext, replacefile):
+    with open(replacefile) as rf:
+        frdict = json.load(rf)
     for f in frdict:
         inputtext = inputtext.replace(f, frdict[f])
     return inputtext

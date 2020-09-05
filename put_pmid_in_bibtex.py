@@ -27,7 +27,7 @@ from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 #-------------------
 import citefunctions
-config = citefunctions.getconfig(os.path.join(os.path.dirname(__file__), 'config.json'))
+config = citefunctions.getconfig()
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()

@@ -21,7 +21,7 @@ import include
 import wordcount
 import citefunctions
 scriptpath = os.path.dirname(os.path.realpath(__file__))
-config = citefunctions.getconfig(os.path.join(scriptpath, 'config.json'))
+config = citefunctions.getconfig()
 #-------------------
 import argparse
 parser = argparse.ArgumentParser()
@@ -33,18 +33,17 @@ parser.add_argument('-c', '--cslfile', default=config['cslfile'],               
 parser.add_argument('-y', '--yaml', default='choose',                               help='use this yaml file with pandoc; use "normal" or "fancy"\
                     for config set one; the default, "choose", indicates that normal will be used only if there is no yaml in the current file')
 #---- other options
+parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
+parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],          help='append as many pandoc formats as you want: pdf docx html txt md tex')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False,     help='use only local bib file')
 parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory', )
 parser.add_argument('-img', '--imagedir', default=config['imagedir'],               help='imagedirectoryname')
 parser.add_argument('-i', '--include', action="store_false", default=True,          help='do NOT include files')
 parser.add_argument('-m', '--messy', action="store_true", default=False,            help='disable clean up of intermediate files')
 parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
-parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
-parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],          help='append as many pandoc formats as you want: pdf docx html txt md tex')
 parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False,    help='use pandoc-mermaid-filter')
 parser.add_argument('-lt', '--latex_template', default='', help='a latex template to be passed to pandoc')
 parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired') # e.g. a letter format
-parser.add_argument('-r', '--customreplace', action="store_true", default=False,    help='run custom find/replace commands specified in config file')
 parser.add_argument('-redact', '--redact', action="store_true", default=False,      help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
 parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
@@ -60,12 +59,12 @@ else:
     sys.exit()
 with citefunctions.cd(os.path.split(args.filepath)[0]):
     args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
-    outpath, filename = os.path.split(args.filepath)
-    pandocoutpath = os.path.join(outpath, args.outputsubdir)
+    sourcepath, filename = os.path.split(args.filepath)
+    pandocoutpath = os.path.join(sourcepath, args.outputsubdir)
     if pandocoutpath != '':
         citefunctions.check_dir(pandocoutpath)
     filestem = '.'.join(filename.split('.')[:-1])
-    bibout = os.path.join(outpath, filestem+".bib")
+    bibout = os.path.join(sourcepath, filestem+".bib")
     yamlsource = args.filepath
     if args.yaml=="choose":
         if len(citefunctions.getyaml(args.filepath, do_includes=args.include)) == 0:
@@ -77,7 +76,7 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         if os.path.exists(configyamlpath):
             yamlsource = configyamlpath
     else:
-        specyamlpath = os.path.abspath(os.path.join(outpath, args.yaml))
+        specyamlpath = os.path.abspath(os.path.join(sourcepath, args.yaml))
         if os.path.exists(specyamlpath): # read user-specified yaml file
             yamlsource = specyamlpath
         else:
@@ -113,16 +112,16 @@ elif args.filepath.endswith(".tex"):
 # name output file
 if args.outputstyle == 'pubmed' or args.outputstyle == 'pmid':
     print("outputstyle = pmid")
-    outputfile = os.path.join(outpath, filestem+".citepmid."+input_file_extension)
+    outputfile = os.path.join(sourcepath, filestem+".citepmid."+input_file_extension)
 elif args.outputstyle == 'markdown' or args.outputstyle == 'md':
     print("outputstyle = md")
-    outputfile = os.path.join(outpath, filestem+".citemd."+input_file_extension)
+    outputfile = os.path.join(sourcepath, filestem+".citemd."+input_file_extension)
 elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
     print("outputstyle = tex")
-    outputfile = os.path.join(outpath, filestem+".citetex."+input_file_extension)
+    outputfile = os.path.join(sourcepath, filestem+".citetex."+input_file_extension)
 elif args.outputstyle == 'inline':
     print("outputstyle = inline")
-    outputfile = os.path.join(outpath, filestem+".citeinline."+input_file_extension)
+    outputfile = os.path.join(sourcepath, filestem+".citeinline."+input_file_extension)
 #-------------------
 # read input file
 if args.include:
@@ -163,8 +162,9 @@ if len(bib.newpmids)>0:
         ('&term='.join(["{}[pmid]".format(x) for x in pmids_to_add_to_inputdb])))
 '''
 #-----------------
-if args.customreplace:
-    text = citefunctions.findreplace(text, config['custom_find_replace'])
+replacefile = os.path.join(sourcepath, "replace.json")
+if os.path.exists(replacefile):
+    text = citefunctions.findreplace(text, replacefile)
 #-----------------
 print ("Word count: {}\n".format(wordcount.wordcount(text)))
 #-----------------

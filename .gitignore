@@ -1,3 +1,4 @@
 *.pyc
 old/*
 test/*
+config_local.json

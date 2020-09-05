@@ -88,16 +88,16 @@ Optional:
 - bib file.
 	A bibtex file to use. If not specified, a new `myfile.bib` file will be created in the same directory as your input file. You can also specify a global bib file for keeping a shared bank of references.
 - csl file
-	You can add a csl file to the same directory as the md file, and then direct pandoc to it using yaml. That simply means putting this exact text at the top of your md file:
+	You can add a csl file to the same directory as the md file, and then direct pandoc to it using yaml. That simply means putting this exact text at the top of your md file or in a separate YAML file:
 	```
 	---
 	csl: myfile.csl
 	---
 	```
-	or by specifying a separate YAML file
 - yaml file
 	You can specify an external YAML file
 - replace.json file
+	A file called `replace.json` will be read as a dictionary of text strings to find:replace.
 
 Intended use:
 Feed in a .md or .tex document with references in square [] or curly {} or round brackets will be searched for PMID
@@ -122,13 +122,14 @@ Two outputs are specified.
 If -p is specified, -o must be md.
 If both -p is specified an -o is not unset or md, this indicates that the user's expectation is different ==> so the script exits.
 
+## Hackmd automatic download
 
+hackmd.py - download hackmd files either by combining elements from a directory tree or a single file, then run fixcitations.py
 
 
 # Additional utilities
 
 The following additional scripts are included to provide some useful functions:
-hackmd.py - download hackmd files either by combining elements from a directory tree or a single file, then run fixcitations.py
 include.py - include files recursively according to a variety of syntaxes
 put_pmid_in_bibtex.py - search for PMIDs for every element in a .bib file. Designed to run as a cron job to keep your bib file up to date.
 abbreviation_finder.py - print abbreviations in a document (so that you can explain them)
@@ -164,8 +165,8 @@ There are lots of bibtex database software tools available. The following work v
 
 ### For making Gantt, flowcharts etc
 
-- mermaids.cli (https://github.com/mermaidjs/mermaid.cli)
-Mermaids is a bit of a hassle to install and needs to be in you PATH variable for this to work. But if it is in there, you can use the -pm option to call mermaids and automatically generate nice figures. 
+- mermaids.cli (https://github.com/mermaid-js/mermaid-cli)
+Mermaids is a bit of a hassle to install and needs to be in you PATH variable for this to work. But if it is in there, you can use the -pm option to call mermaids and automatically generate nice figures.
 
 This installation procedure worked for me on a mac:
 

@@ -4,9 +4,6 @@
 import io
 import os
 import re
-import pandas as pd
-import numpy as np
-from tabulate import tabulate
 #-----------------------------
 '''
 RULES:
@@ -81,6 +78,10 @@ def include_excel(excelfile):
     tablefmt="pipe"
     tablefmt="fancygrid"
     '''
+
+    import pandas as pd
+    import numpy as np
+    from tabulate import tabulate
 
     # BUDGET
     df = pd.read_excel(excelfile, index_col=0, dtype=str)

@@ -2,44 +2,6 @@
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
-'''
-
-python fix_citations.py -f test/eme1.md -o pmid
-
-Intended use:
-Feed in a .md or .tex document
-references in square [] or curly {} or round brackets will be searched for PMID
-
-If there is a mixture of reference types in one set of parentheses, ids with the format PMID:NNNNN will be handled correctly but spaces etc will be ignored.
-
-The default or specified .bib file will then be searched for the relevant citations.
-Citations will be replaced with a citaion in either .md or .tex or PMID format.
-
-Any citations not present in the master .bib file will be downloaded from pubmed and added to the supplementary.bib file
-
-Two new files will be written:
-1. a new .md or .tex file with correct citations
-2. a local .bib file containing all cited reference details.
-
-
-export PATH=$PATH":$HOME/Dropbox/3_scripts_and_programs/citeswitcher/"
-
-
-sudo ln -s "~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py" /usr/local/bin/fix
-
-
-# OUTPUT FILE ARGUMENTS LOGIC
-
-Two outputs are specified.
--o determines the CITATION FORMAT and is intended to be the primary use case - switching between different citation formats
--p determines the PANDOC OUTPUT FORMAT and provides a quick workflow for generating fully formatted documents
-
-If -p is specified, -o must be md.
-If both -p is specified an -o is not unset or md, this indicates that the user's expectation is different ==> so the script exits.
-
-
-'''
-
 #-------------------
 import os
 import io

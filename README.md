@@ -128,19 +128,16 @@ Uses `wget` to download your **published** files from hackmd.io and runs fixcita
 2. *Within* your new `hackmddir`, create a folder with the exact name of your [hackmd.io](hackmd.io) username or group name.
 3. Create a hackmd file and publish it. It's easier if you choose the url name for it, such as "mytestfile"
 4. Create yet another folder with the same name as your hackmd file. So your directory structure would be like this:
-
-
+```
 - my_hackmd_dir
 |	+-- my_username
 |		+-- mytestfile
 
-
-
+```
 5. Run `python hackmd.py`
 
 If this works, your file should download into the mytestfile directory, and you should see the following files:
-
-
+```
 - my_hackmd_dir
 |	+-- my_username
 |		+-- mytestfile
@@ -149,8 +146,7 @@ If this works, your file should download into the mytestfile directory, and you 
 |			+-- mytestfie.citemd.pdf
 |			+-- mytestfie.citemd.docx
 |			+-- mytestfie.citemd.html
-
-
+```
 
 hackmd.py - download hackmd files either by combining elements from a directory tree or a single file, then run fixcitations.py
 

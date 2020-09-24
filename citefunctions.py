@@ -642,12 +642,15 @@ def mdout(theseids, thesemissing=[], outputstyle="md"):
             blockstring += "[***{}]".format(', '.join(thesemissing))
     return blockstring
 
-def replace_blocks(thistext, outputstyle="md"):
+def replace_blocks(thistext, outputstyle="md", use_whole=False):
     # pmid first as they are the most likely to have errors
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext)
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
-    r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext) if x not in p+l]
+    if use_whole:
+        r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext) if x not in p+l]
+    else:
+        r=[]
     print ("Number blocks using pmid or doi or md:{}".format(len(p)))
     print ("Number blocks using latex:{}".format(len(l)))
     print ("Number blocks using wholeref:{}".format(len(r)))
@@ -782,6 +785,7 @@ def p2b(pmidlist):
             Year = Year.text
             if Month is not None:
                 Month = Month.text
+        '''
         try:
             for _ in (PMID.text, Volume.text, Title.text, ArticleTitle.text, MedlinePgn.text, Abstract.text, ''.join(authors)):
                 if _ is None:
@@ -790,6 +794,7 @@ def p2b(pmidlist):
                 assert '}' not in _, _
         except AttributeError:
             pass
+        '''
 
         # make the bibtex formatted output.
         bib = {}

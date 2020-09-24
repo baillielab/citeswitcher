@@ -48,6 +48,7 @@ parser.add_argument('-redact', '--redact', action="store_true", default=False,  
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
 parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
+parser.add_argument('-w', '--wholereference', action="store_true", default=False,          help='try to match whole references.')
 args = parser.parse_args()
 #-------------------
 if args.filepath:
@@ -148,7 +149,7 @@ else:
 bib.make_alt_dicts()
 #-----------------
 # replace the ids in the text with the outputstyle
-text = citefunctions.replace_blocks(text, args.outputstyle)
+text = citefunctions.replace_blocks(text, args.outputstyle, use_whole=args.wholereference)
 #-----------------
 # save remote bibliography
 print ('\nsaving remote bibliography for this file here:', bibout)

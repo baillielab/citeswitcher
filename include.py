@@ -4,6 +4,9 @@
 import io
 import os
 import re
+import pandas as pd
+import numpy as np
+from tabulate import tabulate
 #-----------------------------
 '''
 RULES:
@@ -67,24 +70,19 @@ def clear_nan(thisdf):
     thisdf = thisdf.replace(np.nan, '', regex=True)
     return thisdf
 
-def include_excel(excelfile):
-    '''
-    parse and include excel file
-
-    table format options
-    tablefmt="github"
-    tablefmt="simple"
-    tablefmt="grid"
-    tablefmt="pipe"
-    tablefmt="fancygrid"
-    '''
-
-    import pandas as pd
-    import numpy as np
-    from tabulate import tabulate
-
+'''
+# THIS FUNCTION LEFT HERE FOR NOW BECAUSE IT IS USED FOR BUDGET ELSEWHERE
+def include_df(thisfile, filetype="xlsx"):
     # BUDGET
-    df = pd.read_excel(excelfile, index_col=0, dtype=str)
+    if filetype == "xlsx":
+        df = pd.read_excel(thisfile, index_col=0, dtype=str)
+    elif filetype == "csv":
+        df = pd.read_csv(thisfile, index_col=0)
+    elif filetype == "tsv":
+        df = pd.read_csv(thisfile, index_col=0, sep="\t")
+    else:
+        print ("{} not read as {}".format(thisfile, filetype))
+        return
     print (df)
     for colname in df.columns:
         if colname.startswith('#'):
@@ -97,6 +95,62 @@ def include_excel(excelfile):
         df[thiscol] = df[thiscol].map("{}".format)
     df = clear_nan(df)
     return tabulate(df, tablefmt="grid", headers="keys")
+'''
+def include_df(thisfile, filetype="xlsx"):
+    '''
+    parse and include excel file
+
+    table format options
+    tablefmt="github"
+    tablefmt="simple"
+    tablefmt="grid"
+    tablefmt="pipe"
+    tablefmt="fancygrid"
+    tablefmt="latex"
+    '''
+
+    # BUDGET
+    if filetype == "xlsx":
+        df = pd.read_excel(thisfile, index_col=0, dtype=str)
+    elif filetype == "csv":
+        df = pd.read_csv(thisfile, index_col=0)
+    elif filetype == "tsv":
+        df = pd.read_csv(thisfile, index_col=0, sep="\t")
+    else:
+        print ("{} not read as {}".format(thisfile, filetype))
+        return
+    # if any colname starts with "chr:pos" then sort by it
+    chrlist = [x for x in list(df.columns) if x.startswith("chr:pos")]
+    if len(chrlist)>0:
+        sortcol = chrlist[0]
+        tempchr = "chrtempforsorting123412341234"
+        temppos = "postempforsorting123412341234"
+        df[[tempchr,temppos]] = df[sortcol].str.split(":", expand=True)
+        df[tempchr] = pd.to_numeric(df[tempchr])
+        df[temppos] = pd.to_numeric(df[temppos])
+        df.sort_values(by=[tempchr,temppos], inplace=True)
+        df.drop([tempchr,temppos], axis=1, inplace=True)
+        print (df)
+    for colname in df.columns:
+        if colname.startswith('#'):
+            df = df.drop(colname, axis=1)
+        elif "£" in colname:
+            df[colname] = pd.to_numeric(df[colname])
+            df[colname] = df[colname].map("£{0:,.2f}".format)
+        else:
+            try:
+                df[colname] = pd.to_numeric(df[colname])
+            except:
+                continue
+            # round all numeric columns to 2sf
+            df[colname] = df[colname].map("{0:.2g}".format)
+    # format number
+    for thiscol in []:
+        df[thiscol] = df[thiscol].map("{}".format)
+    df = clear_nan(df)
+    #df.rename(columns={x:x.replace(" ","\\newline") for x in df.columns}, inplace=True)
+    #print (df)
+    return tabulate(df, tablefmt="fancygrid", headers="keys")
 
 
 def parse_includes(thisfile, verbose=False):
@@ -134,7 +188,11 @@ def parse_includes(thisfile, verbose=False):
             for inc in includes:
                 if includes[inc] == filepath:
                     if filepath.endswith('.xlsx'):
-                        newtext = include_excel(filepath)
+                        newtext = include_df(filepath, filetype="xlsx")
+                    elif filepath.endswith('.csv'):
+                        newtext = include_df(filepath, filetype="csv")
+                    elif filepath.endswith('.tsv'):
+                        newtext = include_df(filepath, filetype="tsv")
                     text = text.replace(inc, newtext)
     return text
 

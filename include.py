@@ -107,6 +107,9 @@ def include_df(thisfile, filetype="xlsx"):
     tablefmt="pipe"
     tablefmt="fancygrid"
     tablefmt="latex"
+    plain, simple, github, grid, fancy_grid, pipe,
+                          orgtbl, rst, mediawiki, html, latex, latex_raw,
+                          latex_booktabs, tsv
     '''
 
     # BUDGET
@@ -130,7 +133,6 @@ def include_df(thisfile, filetype="xlsx"):
         df[temppos] = pd.to_numeric(df[temppos])
         df.sort_values(by=[tempchr,temppos], inplace=True)
         df.drop([tempchr,temppos], axis=1, inplace=True)
-        print (df)
     for colname in df.columns:
         if colname.startswith('#'):
             df = df.drop(colname, axis=1)
@@ -148,9 +150,10 @@ def include_df(thisfile, filetype="xlsx"):
     for thiscol in []:
         df[thiscol] = df[thiscol].map("{}".format)
     df = clear_nan(df)
-    #df.rename(columns={x:x.replace(" ","\\newline") for x in df.columns}, inplace=True)
+    # replace all spaces with newline
+    #df.rename(columns={x:x.replace(" ","\n") for x in df.columns}, inplace=True)
     #print (df)
-    return tabulate(df, tablefmt="fancygrid", headers="keys")
+    return tabulate(df, tablefmt="simple", headers="keys")
 
 
 def parse_includes(thisfile, verbose=False):

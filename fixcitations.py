@@ -49,6 +49,7 @@ parser.add_argument('-s', '--stripcomments', action="store_true", default=False,
 parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
 parser.add_argument('-w', '--wholereference', action="store_true", default=False,          help='try to match whole references.')
+parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,          help='use pandoc --top-level-division=chapter')
 args = parser.parse_args()
 #-------------------
 if args.filepath:
@@ -204,6 +205,7 @@ if len(args.pandoc_outputs)>0:
                     yaml=yamlinstruction,
                     out_dir=pandocoutpath,
                     x=args.xelatex,
+                    ch=args.chaptermode,
                     pathtopandoc=args.pathtopandoc
                     )
     if len(args.pandoc_outputs)>0 and not args.messy:

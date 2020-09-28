@@ -30,12 +30,12 @@ import include
 #-------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 #-------------
-def getconfig(cfgfile=""):
-    cfgfile = "null"
-    for cfgname in ['config_local.json', "config.json"]:
-        cfgfile = os.path.join(scriptpath, cfgname)
-        if os.path.exists(cfgfile):
-            break
+def getconfig(cfgfile="null"):
+    if cfgfile=="null":
+        for cfgname in ['config_local.json', "config.json"]:
+            cfgfile = os.path.join(scriptpath, cfgname)
+            if os.path.exists(cfgfile):
+                break
     with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
     for item in data:
@@ -113,7 +113,7 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
-def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, pathtopandoc="pandoc"):
+def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
     # crossref must come before citeproc
     # entire yaml file is pre-pended to the main file
     cmd = '{} --atx-headers --filter {}-crossref --filter {}-citeproc {} {} {} -o {} '.format(
@@ -127,6 +127,8 @@ def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, pathtopandoc=
         )
     if x:
         cmd += " --pdf-engine=xelatex "
+    if ch:
+        cmd += " --top-level-division=chapter "
     if out_ext in ['.md','.txt']:
         #cmd += "  -t markdown-citations -t markdown-strict "
         cmd += "  -t markdown-citations "
@@ -208,13 +210,13 @@ def readheader(filecontents):
         h2 = re.findall( '---[\s\S]+?\.\.\.',filecontents)
 
         if len(h1)>0 and len(h2)>0:
-            print ("both yaml header formats match! Taking the shorter one")
+            #print ("both yaml header formats match! Taking the shorter one")
             if len(h1[0]) < len(h2[0]):
                 h=h1[0]
-                print ("Choosing ---/---\n", h)
+                #print ("Choosing ---/---\n", h)
             else:
                 h=h2[0]
-                print ("Choosing ---/...\n", h)
+                #print ("Choosing ---/...\n", h)
         elif len(h1)>0:
             h = h1[0]
         elif len(h2)>0:

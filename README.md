@@ -103,7 +103,7 @@ Optional:
 - *yaml file*.
 	You can specify an external YAML file
 - *replace.json file*.
-	A file called `replace.json` will be read as a dictionary of text strings to find:replace.
+	A file called `replace.json` will be read as a dictionary of text strings to find:replace. If you just create this file and leave it in the same directory as the input file, it will be read.
 
 The default (in `config.json`) or specified .bib file will be searched for the relevant citations.
 Citations will be replaced with a citaion in either .md or .tex or PMID format.

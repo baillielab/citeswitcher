@@ -28,8 +28,6 @@ from bibtexparser.latexenc import latex_to_unicode
 import bib
 import include
 #-------------
-scriptpath = os.path.dirname(os.path.realpath(__file__))
-#-------------
 def getconfig(cfgfile="null"):
     if cfgfile=="null":
         for cfgname in ['config_local.json', "config.json"]:
@@ -98,7 +96,6 @@ class cd:
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
 #-------------
-
 def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
 
@@ -112,6 +109,56 @@ def getext(filepath):
 
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
+
+def move_figures(thistext, dropfilepath=True):
+    figureformat = '!\[.*?\]\(.*?\).*?\n'
+    blank_svg = os.path.abspath(os.path.join(scriptpath, "sup-files/no_image.svg"))
+    figures_found = re.findall(figureformat, thistext)
+    lines = [x for x in thistext.split("\n")]
+    lines.reverse()
+    for x in lines:
+        if len(x.strip()) > 0:
+            if x.startswith("#") and "Reference" in x:
+                rline = x+"\n"
+                thistext = thistext.replace(rline,"")
+                print ("Removing this line:", rline)
+            break
+    if len(figures_found)>0:
+        thistext += "# Figure Legends\n\n"
+    for i,fig in enumerate(figures_found):
+        thistext = thistext.replace(fig,"")
+        if dropfilepath:
+            startpos = fig.rfind("](")
+            fig = fig[:startpos] + re.sub('\]\(.*?\)', ']({})'.format(blank_svg), fig[startpos:], count=0)
+        legend = "{}\n\n".format(fig)
+        thistext += legend
+        thistext += "\n\n"
+    return thistext
+
+def find_svgs(thistext):
+    imagelink = '!\[.*?\]\(.*?\.svg\)'
+    svgs_found = re.findall(imagelink, thistext)
+    return svgs_found
+
+def replace_svgs(thistext, thispath):
+    '''inkscape -D --export-filename=recruitmentbyweek.pdf recruitmentbyweek.svg '''
+    #imagelink = '!\[[\S]*?\]\([\S]*?.svg\)'
+    svgcalls = find_svgs(thistext)
+    for call in list(set(svgcalls)):
+        filename = call.rsplit(']', 1)[1]
+        filename = re.findall('\([\S]*?.svg\)',filename)[0][1:-1]
+        subdir, filename = os.path.split(filename)
+        outpath = os.path.abspath(os.path.join(thispath, subdir))
+        pdf_filename = filename.replace(".svg",".pdf")
+        callpdf = call.replace(filename, pdf_filename)
+        cmd = "inkscape -D --export-filename={} {}".format(pdf_filename, filename)
+        print ("Replacing {} with pdf: {}".format(filename, pdf_filename))
+        print (outpath)
+        print (cmd)
+        with cd(outpath):
+            subprocess.call(cmd, shell=True)
+        thistext = thistext.replace(call, callpdf)
+    return thistext
 
 def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
     # crossref must come before citeproc
@@ -192,6 +239,8 @@ def getyaml(filepath, do_includes=True):
         line = line.split(": ")
         if len(line)>1:
             yml[line[0]]=line[1]
+        else:
+            yml[line[0]]=""
     return yml
 
 def readheader(filecontents):
@@ -235,10 +284,6 @@ def addheader(filecontents, bibtexfile, cslfilepath='null'):
     headerkeys = [x.split(':')[0] for x in header]
     comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
     header = comments+header
-    '''
-    if 'title' not in headerkeys:
-        header.append('title: {}'.format(os.path.split(bibtexfile)[0].replace('.bib','')))
-    '''
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
     if 'bibliography' not in headerkeys:

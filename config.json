@@ -4,7 +4,7 @@
     "zotero_bibfile": "unset",
     "default_bibfile": "unset",
     "toolname": "citeswitcher",
-    "yamldir": "{{scriptpath}}sup-files/yaml_files/",
+    "yamldir": "{{scriptpath}}sup-files/yaml/",
     "testfile": "{{scriptpath}}sup-files/test.md",
     "cslfile": "{{scriptpath}}sup-files/csl/nature.csl",
     "imagedir": "img",

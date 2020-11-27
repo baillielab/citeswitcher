@@ -10,4 +10,6 @@ tableTitle: Table
 figPrefix: Figure
 eqnPrefix: Equation
 tblPrefix: Table
+header-includes: |
+    \sloppy
 ...

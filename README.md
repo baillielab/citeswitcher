@@ -1,3 +1,13 @@
+<!--
+TODO
+
+Change supfile names to be clear they are auto generated. 
+Use one bib file per directory e.g. local.bib
+cs_local.bib
+cs_replace.json
+-->
+
+
 # Citeswitcher
 
 For simple collaboration in academic writing. Cite papers as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them and make a common bib file for you, and call pandoc to make a fully referenced pdf, docx or html file.

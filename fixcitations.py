@@ -50,6 +50,7 @@ parser.add_argument('-v', '--verbose', action="store_true", default=False,      
 parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
 parser.add_argument('-w', '--wholereference', action="store_true", default=False,          help='try to match whole references.')
 parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,          help='use pandoc --top-level-division=chapter')
+parser.add_argument('-svg', '--convert_svg', action="store_true", default=False,          help='convert svg images to pdf - replaces any pdf files with the same name')
 args = parser.parse_args()
 #-------------------
 if args.filepath:
@@ -66,29 +67,43 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
     if pandocoutpath != '':
         citefunctions.check_dir(pandocoutpath)
     filestem = '.'.join(filename.split('.')[:-1])
-    bibout = os.path.join(sourcepath, filestem+".bib")
+    bibout = os.path.join(sourcepath, "cs.bib")
     yamlsource = args.filepath
     if args.yaml=="choose":
         if len(citefunctions.getyaml(args.filepath, do_includes=args.include)) == 0:
-            # then there is no yaml in this input file. use normal.
-            args.yaml = "normal"
+            # then there is no yaml in this input file. Now look for a bespoke local yaml file
+            localyaml = citefunctions.newext(args.filepath ,".yaml")
+            print (localyaml)
+            if os.path.exists(localyaml):
+                print ("exists")
+                print (citefunctions.getyaml(localyaml))
+                if len(citefunctions.getyaml(localyaml)) == 0:
+                    args.yaml = "normal"
+                else:
+                    print ("YAML settings being read from local yaml file: {}".format(localyaml))
+                    args.yaml = localyaml
+            else:
+                args.yaml = "normal"
     if not args.yaml.endswith(".yaml"):
         # then this isn't a user-defined yaml file. Search config files.
         configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
+        print ("configyamlpath:", configyamlpath)
         if os.path.exists(configyamlpath):
+            print ("exists")
             yamlsource = configyamlpath
     else:
-        specyamlpath = os.path.abspath(os.path.join(sourcepath, args.yaml))
-        if os.path.exists(specyamlpath): # read user-specified yaml file
-            yamlsource = specyamlpath
+        possible_yamlpath1 = os.path.abspath(os.path.join(sourcepath, args.yaml))
+        if os.path.exists(possible_yamlpath1): # read user-specified yaml file
+            yamlsource = possible_yamlpath1
         else:
-            print ("YAML file ({}) not found.\nProceeding with in-file YAML.".format(configyamlpath))
+            print ("YAML file ({}) not found. Please specify path relative to input file.\nProceeding with in-file YAML.".format(configyamlpath))
     yamldata = citefunctions.getyaml(yamlsource, do_includes=args.include)
     if 'bibliography' in yamldata.keys():
         bibout = yamldata['bibliography']
         print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
         yamlbib = True
     bibout = os.path.abspath(bibout)
+    print ("Using {} as bibout".format(bibout))
 #-------------------
 if len(args.pandoc_outputs) > 0:  # if -p is set
     if args.outputstyle not in ['null','md','markdown']: # and -o is not md
@@ -137,6 +152,8 @@ if args.redact:
     text = include.redact(text)
 if len(args.pandoc_outputs)>0 or args.stripcomments:
     text = include.stripcomments(text)
+if args.move_figures:
+    text = citefunctions.move_figures(text)
 if args.verbose:
     print ("read input file: ", args.filepath)
 #-------------------
@@ -170,6 +187,16 @@ if os.path.exists(replacefile):
 #-----------------
 print ("Word count: {}\n".format(wordcount.wordcount(text)))
 #-----------------
+svgs = citefunctions.find_svgs(text)
+if len(svgs)>0:
+    if args.convert_svg:
+        text = citefunctions.replace_svgs(text, sourcepath)
+    elif "pdf" in args.pandoc_outputs:
+        print("svg files cannot be included in native form in pdf files:")
+        for x in svgs:
+            print ("\t{}".format(x))
+        print("use the -svg argument to convert these to pdfs with the same name and include them\n")
+#-----------------
 # save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 if input_file_extension in ['md', 'markdown']:
@@ -179,7 +206,7 @@ if input_file_extension in ['md', 'markdown']:
     if not lines[-1].startswith("#") and not lines[-1].startswith("="):
         # then the last line isn't a header, so add one.
         if len(bib.db.entries) > 0:
-            text += "<!--automatically added by fixcitations-->\n\n\n# References"
+            text += "\n\n<!--automatically added by fixcitations-->\n\n\n# References"
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------

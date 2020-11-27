@@ -10,4 +10,6 @@ tableTitle: Supplementary Table
 figPrefix: Supplementary Figure
 eqnPrefix: Supplementary Equation
 tblPrefix: Supplementary Table
+header-includes: |
+    \sloppy
 ...

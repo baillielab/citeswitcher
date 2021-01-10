@@ -51,6 +51,8 @@ parser.add_argument('-x', '--xelatex', action="store_true", default=False,      
 parser.add_argument('-w', '--wholereference', action="store_true", default=False,          help='try to match whole references.')
 parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,          help='use pandoc --top-level-division=chapter')
 parser.add_argument('-svg', '--convert_svg', action="store_true", default=False,          help='convert svg images to pdf - replaces any pdf files with the same name')
+parser.add_argument('-ui', '--uncomment_images', action="store_true", default=False,          help='include images commented out using html syntax <!--![]()\{\} -->')
+parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False,          help='force all citation references into lowercase')
 args = parser.parse_args()
 #-------------------
 if args.filepath:
@@ -84,7 +86,7 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
                     args.yaml = localyaml
             else:
                 args.yaml = "normal"
-    if not args.yaml.endswith(".yaml"):
+    if not (args.yaml.endswith(".yaml") or args.yaml.endswith(".yml")):
         # then this isn't a user-defined yaml file. Search config files.
         configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
         print ("configyamlpath:", configyamlpath)
@@ -93,6 +95,7 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
             yamlsource = configyamlpath
     else:
         possible_yamlpath1 = os.path.abspath(os.path.join(sourcepath, args.yaml))
+        print ("checking for yaml here: {}".format(possible_yamlpath1))
         if os.path.exists(possible_yamlpath1): # read user-specified yaml file
             yamlsource = possible_yamlpath1
         else:
@@ -150,6 +153,8 @@ else:
 text = citefunctions.make_unicode(text)
 if args.redact:
     text = include.redact(text)
+if args.uncomment_images:
+    text = citefunctions.uncomment_images(text)
 if len(args.pandoc_outputs)>0 or args.stripcomments:
     text = include.stripcomments(text)
 if args.move_figures:
@@ -164,10 +169,13 @@ if args.localbibonly:
 else:
     if args.verbose: print ("reading bibfiles:", args.bibfile, bibout)
     bib.full_bibdat = citefunctions.read_bib_files([args.bibfile, bibout])
+if args.force_lowercase_citations:
+    print ("forcing lowercase citations")
+    bib.id_to_lower()
 bib.make_alt_dicts()
 #-----------------
 # replace the ids in the text with the outputstyle
-text = citefunctions.replace_blocks(text, args.outputstyle, use_whole=args.wholereference)
+text = citefunctions.replace_blocks(text, args.outputstyle, use_whole=args.wholereference, flc=args.force_lowercase_citations)
 #-----------------
 # save remote bibliography
 print ('\nsaving remote bibliography for this file here:', bibout)

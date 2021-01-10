@@ -107,15 +107,17 @@ for author_section in authsecs:
     for index, row in s.iterrows():
         thisname = row["Name"]
         superscript = []
+        this_author_aff = []
         if row["labels"] != "":
             lab = sorted(list(set([x for x in row["labels"].split(',') if len(x)>0])))
             superscript += [labeldict[x] for x in lab]
             these_labels += lab
         for aff in row.drop(nonaffiliationcols):
             if check_affiliation(aff):
-                superscript.append(str(affiliations.index(aff)+1))
+                this_author_aff.append(affiliations.index(aff)+1)
                 these_affiliations.append(aff)
         thisname = "{}".format(thisname)
+        superscript += [str(x) for x in sorted(this_author_aff)]
         if len(superscript)>0:
             thisname += "^{}^".format(",".join(superscript))
         #print(row["affiliation1"])

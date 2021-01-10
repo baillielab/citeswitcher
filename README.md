@@ -130,6 +130,33 @@ Two outputs are specified.
 
 If `-p` is specified, `-o` must be md. If both `-p` and `-o` are specified and `-o` is not md, this indicates that the user's expectation is different from what's going to happen so the script exits. Fix this by only specifying one of these options.
 
+## Options
+
+| arg | long arg| action|
+|----|--------------|---------------------------|
+| -b | --bibfile | bibfile |
+| -c | --cslfile | csl citation styles file |
+| -y | --yaml | use this yaml file with pandoc; use "normal" or "fancy"; "choose" indicates that normal will be used only if there is no yaml in the current file|
+| -o | --outputstyle | choices=md,markdown,tex,latex,pubmed,pmid,inline; output references format |
+| -p | --pandoc_outputs | append as many pandoc formats as you want: pdf docx html txt md tex |
+| -l | --localbibonly | use only local bib file |
+| -d | --outputsubdir | outputdir - always a subdir of the working directory || -img | --imagedir | imagedirectoryname |
+| -i | --include | do NOT include files |
+| -m | --messy | disable clean up of intermediate files |
+| -mf | --move_figures | move all figures to the end and create captions section for submission to journal |
+| -pm | --pandoc_mermaid | use pandoc-mermaid-filter |
+| -lt | --latex_template | a latex template to be passed to pandoc |
+| -ptp | --pathtopandoc | specify a particular path to pandoc if desired') # e.g. a letter forma |
+| -redact | --redact | redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags |
+| -s | --stripcomments | stripcomments in html format |
+| -v | --verbose | verbose |
+| -x | --xelatex | use xelatex in pandoc build |
+| -w | --wholereference | try to match whole references. |
+| -ch | --chaptermode | use pandoc --top-level-division=chapter |
+| -svg | --convert_svg | convert svg images to pdf - replaces any pdf files with the same name |
+| -ui | --uncomment_images | include images commented out using html syntax <!--![]()\{\} --> |
+| -flc | --force_lowercase_citations | force all citation references into lowercase |
+
 ## hackmd.py
 
 Uses `wget` to download your **published** files from hackmd.io and runs fixcitations.py. This makes working collaboratively with hackmd very easy, but takes a bit of manual setup:
@@ -162,12 +189,13 @@ hackmd.py - download hackmd files either by combining elements from a directory 
 
 # Additional utilities
 
-The following additional scripts are included to provide some useful functions:
+The following additional scripts are included to provide some useful functions with varying levels of documentation:
 - *include.py* - include files recursively according to a variety of syntaxes
 - *put_pmid_in_bibtex.py* - search for PMIDs for every element in a .bib file. Designed to run as a cron job to keep your bib file up to date.
 - *abbreviation_finder.py* - print abbreviations in a document (so that you can explain them)
 - *wordcount.py* - function unknown at this time
 - *svg2pdf.py* - batch convert a directory (-d) or file (-f) using cairosvg, which seems to perform better than imagemagick.
+- *format_author_list.py* - this is a work in progress but it is intended to create author lists in a variety of formats from a spreadsheet in xlsx or csv format
 
 ## Additional dependencies for optional extra functions
 

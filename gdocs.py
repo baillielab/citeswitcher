@@ -2,11 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 '''
-    automatically read through the specified directory tree (either direct or in config.json)
-    download all md files corresponding to directory names
-    pdf, docx and html them
-    NB:
-    - read settings must be open to the world
+    download a google doc from url
 '''
 
 import os
@@ -19,7 +15,6 @@ import citefunctions
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--direct',    help='enter direct hackmd link')
-parser.add_argument('-c', '--chosendirs',    action='append', default=[], help='chosen directory names')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
 parser.add_argument('-img', '--convertimages', action="store_true", default=False, help='automatically convert images')
 parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
@@ -46,22 +41,8 @@ class cd:
         os.chdir(self.savedPath)
 
 #-----------------------------
-def svg2pdf(thisdir):
-    with open(os.path.join(thisdir, "__README.txt"),"w") as o:
-        o.write("Any saved svg files in this directory will be automatically converted to pdf")
-        o.write("NB pdf files with the same name as an svg will be **OVERWRITTEN**")
-    cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/svg2pdf.py -d {} -o'.format(
-        sys.executable,
-        thisdir
-        )
-    print (cmd)
-    subprocess.call(cmd, shell=True)
 
 def make_output(thispath, thisfile, pathtopandoc=args.pathtopandoc):
-    # if img dir exists, overwrite pdfs
-    imgdir = os.path.join(thispath, "img")
-    if os.path.exists(imgdir) and args.convertimages:
-        svg2pdf(imgdir)
     # run fix citations in messy mode
     extra_args = "-x -svg -pm -flc "
     # -x indicates xelatex mode. Handles special characters. Crashes sid.

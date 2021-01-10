@@ -30,6 +30,10 @@ def init():
     additionaldicts.append((pmids, "pmid"))
     additionaldicts.append((dois, "doi"))
 
+def id_to_lower():
+    for entry in full_bibdat.entries:
+        entry["ID"] = entry["ID"].lower()
+
 def make_alt_dicts():
     for entry in full_bibdat.entries:
         for thisdict, thislabel in additionaldicts:

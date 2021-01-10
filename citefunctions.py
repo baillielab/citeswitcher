@@ -110,10 +110,21 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
+def uncomment_images(thistext):
+    commented_image_regex = '<!--!\[.*?\]\(.*?\).*?-->'
+    ci_found = re.findall(commented_image_regex, thistext)
+    print ("found: ", len(ci_found), len(thistext))
+    for ci in ci_found:
+        try:
+            thistext = thistext.replace(ci, ci[4:-3])
+        except:
+            pass
+    return thistext
+
 def move_figures(thistext, dropfilepath=True):
     figureformat = '!\[.*?\]\(.*?\).*?\n'
     blank_svg = os.path.abspath(os.path.join(scriptpath, "sup-files/no_image.svg"))
-    figures_found = re.findall(figureformat, thistext)
+    figures_found = list(set(re.findall(figureformat, thistext)))
     lines = [x for x in thistext.split("\n")]
     lines.reverse()
     for x in lines:
@@ -668,9 +679,11 @@ def pmidout(pmidlist, notpmidlist):
         blockstring = 'null'
     return blockstring
 
-def mdout(theseids, thesemissing=[], outputstyle="md"):
+def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
     if len(theseids) == 0:
         return 'null'
+    if flc:
+        theseids = [x.lower() for x in theseids]
     # add to the outputdatabase
     bib.cite(theseids)
     # make a blockstring
@@ -689,7 +702,7 @@ def mdout(theseids, thesemissing=[], outputstyle="md"):
             blockstring += "[***{}]".format(', '.join(thesemissing))
     return blockstring
 
-def replace_blocks(thistext, outputstyle="md", use_whole=False):
+def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     # pmid first as they are the most likely to have errors
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext)
@@ -708,7 +721,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False):
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib
             theseids = list(set(theseids+citedhere['ids']))
-            replacedict[b] = mdout(theseids, notfound, outputstyle)
+            replacedict[b] = mdout(theseids, notfound, outputstyle, flc=flc)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(citedhere['ids'], citedhere['notfound']) # ids added to bib
             pm = list(set(pm+citedhere['pmids']))
@@ -718,7 +731,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False):
     for b in r:
         theseids, theseothers = parse_wholecitation_block(b)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
-            replacedict[b] = mdout(theseids, theseothers, outputstyle)
+            replacedict[b] = mdout(theseids, theseothers, outputstyle, flc=flc)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
             replacedict[b] = pmidout(pm, notpm)
@@ -858,7 +871,7 @@ def p2b(pmidlist):
             titlestring = ''
         if len(authorname+titlestring)==0:
             titlestring = "PMID{}_".format(PMID.text)
-        new_id = '{}{}{}'.format(authorname, titlestring, Year)
+        new_id = '{}{}{}'.format(authorname, titlestring, Year).lower()
         new_id = re.sub(r'\W+', '', new_id)
         bib["ID"] = latexchars.replace_accents(new_id)
         bib["Author"] = ' and '.join(authors)

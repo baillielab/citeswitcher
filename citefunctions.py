@@ -171,6 +171,24 @@ def replace_svgs(thistext, thispath):
         thistext = thistext.replace(call, callpdf)
     return thistext
 
+def make_output(thispath, pathtopandoc="pandoc", localbibonly=False):
+    # run fix citations in messy mode
+    extra_args = "-x -svg -pm -flc "
+    # -x indicates xelatex mode. Handles special characters. Crashes sid.
+    # -pm indicates that pandoc mermaid is used
+    if localbibonly:
+        extra_args += (" -l")
+    cmd = '{} {} {} -f {} -m {} -ptp {} '.format(
+        sys.executable,
+        os.path.join(scriptpath, "fixcitations.py")
+        extra_args,
+        thispath,
+        " ".join(["-p "+x.replace(".","") for x in outputformats]),
+        pathtopandoc
+        )
+    print (cmd)
+    subprocess.call(cmd, shell=True)
+
 def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
     # crossref must come before citeproc
     # entire yaml file is pre-pended to the main file

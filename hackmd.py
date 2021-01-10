@@ -36,59 +36,16 @@ archive_dir = "archive"
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 config = citefunctions.getconfig()
 #-----------------------------
-class cd:
-    def __init__(self, newPath):
-        self.newPath = os.path.expanduser(newPath)
-    def __enter__(self):
-        self.savedPath = os.getcwd()
-        os.chdir(self.newPath)
-    def __exit__(self, etype, value, traceback):
-        os.chdir(self.savedPath)
-
-#-----------------------------
-def svg2pdf(thisdir):
-    with open(os.path.join(thisdir, "__README.txt"),"w") as o:
-        o.write("Any saved svg files in this directory will be automatically converted to pdf")
-        o.write("NB pdf files with the same name as an svg will be **OVERWRITTEN**")
-    cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/svg2pdf.py -d {} -o'.format(
-        sys.executable,
-        thisdir
-        )
-    print (cmd)
-    subprocess.call(cmd, shell=True)
-
-def make_output(thispath, thisfile, pathtopandoc=args.pathtopandoc):
-    # if img dir exists, overwrite pdfs
-    imgdir = os.path.join(thispath, "img")
-    if os.path.exists(imgdir) and args.convertimages:
-        svg2pdf(imgdir)
-    # run fix citations in messy mode
-    extra_args = "-x -svg -pm -flc "
-    # -x indicates xelatex mode. Handles special characters. Crashes sid.
-    # -pm indicates that pandoc mermaid is used
-    if args.localbibonly:
-        extra_args += (" -l")
-    cmd = '{} ~/Dropbox/3_scripts_and_programs/citeswitcher/fixcitations.py {} -f {} -m {} -ptp {} '.format(
-        sys.executable,
-        extra_args,
-        os.path.join(thispath, thisfile),
-        " ".join(["-p "+x.replace(".","") for x in outputformats]),
-        pathtopandoc
-        )
-    print (cmd)
-    subprocess.call(cmd, shell=True)
-
-#-----------------------------
 if args.direct:
     args.direct = args.direct.replace("/edit", "")
     dfile = 'hackmd_download.md'
     cmd = 'wget {}/download -O {}'.format(args.direct, dfile)
     print (cmd)
     subprocess.call(cmd, shell=True)
-    make_output(dfile)
+    citefunctions.make_output(dfile, pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly)
 else:
     hackmd = os.path.expanduser(config['hackmddir'])
-    with cd(hackmd):
+    with citefunctions.cd(hackmd):
         dirnames = [x for x in os.listdir() if os.path.isdir(x)]
         print ("running over:", dirnames)
         for d in dirnames:
@@ -116,7 +73,7 @@ else:
                 print (cmd)
                 subprocess.call(cmd, shell=True)
 
-                make_output(thispath, mdfile)
+                citefunctions.make_output(os.path.join(thispath, mdfile), pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly)
 
 
 

@@ -172,9 +172,9 @@ if __name__ == "__main__":
             if len(sn)>0:
                 people = get_sections_for_names(lines, sn)
 
-                sqb_format = '\[.*?\]'
+                sqb_format = '\(.*?\)'
                 sqb = re.findall(sqb_format, text)
-                sqb = [x[1:-1].split(",") for x in sqb]
+                sqb = [x.replace("\)",")")[1:-1].split(",") for x in sqb]
                 sqb = [item.strip() for sublist in sqb for item in sublist]
                 allnames = [item.strip() for sublist in sn for item in sublist]
                 new_sqb = list(set(sqb) - set(allnames))

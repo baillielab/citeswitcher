@@ -119,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--sections', action='append', default=[], help='use this to append as many values as you want')
     parser.add_argument('-po', '--peopleoutputfile', default='auto',   help='filename')
     parser.add_argument('-sn', '--searchnames', action='append', default=[], help='use this to append as many values as you want')
-    parser.add_argument('-sj', '--searchnames_jsonfile', default='auto', help="json file containing synonyms dict")
+    parser.add_argument('-sj', '--searchnames_jsonfile', default=None, help="json file containing synonyms dict")
     args = parser.parse_args()
 
     args.filename = os.path.abspath(args.filename)
@@ -133,21 +133,21 @@ if __name__ == "__main__":
     else:
         args.outputfile = os.path.abspath(args.outputfile)
 
-
-    if args.peopleoutputfile == 'auto':
-        args.peopleoutputfile = os.path.join(os.path.split(os.path.abspath(args.searchnames_jsonfile))[0],'people.md')
-    else:
-        args.peopleoutputfile = os.path.abspath(args.peopleoutputfile)
-
-
     if len(args.searchnames)>0:
         sn = args.searchnames
-    elif os.path.exists(args.searchnames_jsonfile):
-        with open(args.searchnames_jsonfile) as f:
-            j = json.load(f)
-        sn = j['names']
+    elif args.searchnames_jsonfile:
+        if os.path.exists(args.searchnames_jsonfile):
+            with open(args.searchnames_jsonfile) as f:
+                j = json.load(f)
+            sn = j['names']
     else:
         sn=[]
+
+    if len(sn)>0:
+        if args.peopleoutputfile == 'auto':
+            args.peopleoutputfile = os.path.join(os.path.split(os.path.abspath(args.searchnames_jsonfile))[0],'people.md')
+        else:
+            args.peopleoutputfile = os.path.abspath(args.peopleoutputfile)
 
     if args.getfilename:
         print (args.outputfile)
@@ -172,9 +172,9 @@ if __name__ == "__main__":
             if len(sn)>0:
                 people = get_sections_for_names(lines, sn)
 
-                sqb_format = '\(.*?\)'
+                sqb_format = '\[.*?\]'
                 sqb = re.findall(sqb_format, text)
-                sqb = [x.replace("\)",")")[1:-1].split(",") for x in sqb]
+                sqb = [x.replace("\]","]")[1:-1].split(",") for x in sqb]
                 sqb = [item.strip() for sublist in sqb for item in sublist]
                 allnames = [item.strip() for sublist in sn for item in sublist]
                 new_sqb = list(set(sqb) - set(allnames))

@@ -180,7 +180,7 @@ def make_output(thispath, pathtopandoc="pandoc", localbibonly=False):
         extra_args += (" -l")
     cmd = '{} {} {} -f {} -m {} -ptp {} '.format(
         sys.executable,
-        os.path.join(scriptpath, "fixcitations.py")
+        os.path.join(scriptpath, "fixcitations.py"),
         extra_args,
         thispath,
         " ".join(["-p "+x.replace(".","") for x in outputformats]),

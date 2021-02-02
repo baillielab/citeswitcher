@@ -171,7 +171,7 @@ def replace_svgs(thistext, thispath):
         thistext = thistext.replace(call, callpdf)
     return thistext
 
-def make_output(thispath, pathtopandoc="pandoc", localbibonly=False):
+def make_output(thispath, pathtopandoc="pandoc", outputformats=[], localbibonly=False):
     # run fix citations in messy mode
     extra_args = "-x -svg -pm -flc "
     # -x indicates xelatex mode. Handles special characters. Crashes sid.
@@ -192,8 +192,7 @@ def make_output(thispath, pathtopandoc="pandoc", localbibonly=False):
 def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
     # crossref must come before citeproc
     # entire yaml file is pre-pended to the main file
-    cmd = '{} --atx-headers --filter {}-crossref --filter {}-citeproc {} {} {} -o {} '.format(
-            pathtopandoc,
+    cmd = '{} --markdown-headings=atx --filter {}-crossref --citeproc {} {} {} -o {} '.format(
             pathtopandoc,
             pathtopandoc,
             pargs,

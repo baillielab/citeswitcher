@@ -86,9 +86,9 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
                     args.yaml = localyaml
             else:
                 args.yaml = "normal"
+    configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
     if not (args.yaml.endswith(".yaml") or args.yaml.endswith(".yml")):
         # then this isn't a user-defined yaml file. Search config files.
-        configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
         print ("configyamlpath:", configyamlpath)
         if os.path.exists(configyamlpath):
             print ("exists")
@@ -99,7 +99,7 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         if os.path.exists(possible_yamlpath1): # read user-specified yaml file
             yamlsource = possible_yamlpath1
         else:
-            print ("YAML file ({}) not found. Please specify path relative to input file.\nProceeding with in-file YAML.".format(configyamlpath))
+            print ("YAML file ({}) not found. Please specify path relative to input file.\n Proceeding with in-file YAML.".format(configyamlpath))
     yamldata = citefunctions.getyaml(yamlsource, do_includes=args.include)
     if 'bibliography' in yamldata.keys():
         bibout = yamldata['bibliography']
@@ -209,12 +209,6 @@ if len(svgs)>0:
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 if input_file_extension in ['md', 'markdown']:
     text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
-    # check for "# References" header or equivalent
-    lines = text.replace("\r","\n").strip().split("\n")
-    if not lines[-1].startswith("#") and not lines[-1].startswith("="):
-        # then the last line isn't a header, so add one.
-        if len(bib.db.entries) > 0:
-            text += "\n\n<!--automatically added by fixcitations-->\n\n\n# References"
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------

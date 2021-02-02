@@ -42,7 +42,7 @@ if args.direct:
     cmd = 'wget {}/download -O {}'.format(args.direct, dfile)
     print (cmd)
     subprocess.call(cmd, shell=True)
-    citefunctions.make_output(dfile, pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly)
+    citefunctions.make_output(dfile, pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly, outputformats=outputformats)
 else:
     hackmd = os.path.expanduser(config['hackmddir'])
     with citefunctions.cd(hackmd):
@@ -73,7 +73,7 @@ else:
                 print (cmd)
                 subprocess.call(cmd, shell=True)
 
-                citefunctions.make_output(os.path.join(thispath, mdfile), pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly)
+                citefunctions.make_output(os.path.join(thispath, mdfile), pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly, outputformats=outputformats)
 
 
 

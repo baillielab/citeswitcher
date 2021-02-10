@@ -173,9 +173,9 @@ def replace_svgs(thistext, thispath):
 
 def make_output(thispath, pathtopandoc="pandoc", outputformats=[], localbibonly=False):
     # run fix citations in messy mode
-    extra_args = "-x -svg -pm -flc "
+    extra_args = "-svg -flc "
     # -x indicates xelatex mode. Handles special characters. Crashes sid.
-    # -pm indicates that pandoc mermaid is used
+    # -flc indicates force lowercase citations
     if localbibonly:
         extra_args += (" -l")
     cmd = '{} {} {} -f {} -m {} -ptp {} '.format(

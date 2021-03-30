@@ -211,6 +211,7 @@ if input_file_extension in ['md', 'markdown']:
     text = citefunctions.addheader(text, yamldata, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
+    print ("outputfile:", outputfile)
 #-----------------
 if len(args.pandoc_outputs)>0:
     # run pandoc

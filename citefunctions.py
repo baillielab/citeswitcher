@@ -310,12 +310,10 @@ def addheader(filecontents, thisyaml, bibtexfile, cslfilepath='null'):
     filecontents = filecontents.strip()
     header, remainder = readheader(filecontents)
     headerkeys = [x.split(':')[0] for x in header] + list(thisyaml.keys())
-    print ("addheaderfunc", headerkeys)
     comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
     header = comments+header
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
-        print ("adding csl now...", header)
     if 'bibliography' not in headerkeys:
         header.append('bibliography: {}'.format(bibtexfile))
     return '---\n{}\n---\n{}'.format('\n'.join(header), remainder)

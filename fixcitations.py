@@ -208,7 +208,7 @@ if len(svgs)>0:
 # save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 if input_file_extension in ['md', 'markdown']:
-    text = citefunctions.addheader(text, os.path.abspath(bibout), cslpath)
+    text = citefunctions.addheader(text, yamldata, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
 #-----------------

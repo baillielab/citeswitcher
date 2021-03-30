@@ -208,7 +208,7 @@ The following additional scripts are included to provide some useful functions w
 
 ### For converting from svg to pdf
 
-- cairosvg (`pip install cairosvg`)
+- inkscape
 
 ### To manage your own bibtex database
 

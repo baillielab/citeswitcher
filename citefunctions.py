@@ -303,21 +303,21 @@ def readheader(filecontents):
         remainder = filecontents.replace(h,'')
     return header, remainder
 
-def addheader(filecontents, bibtexfile, cslfilepath='null'):
+def addheader(filecontents, thisyaml, bibtexfile, cslfilepath='null'):
     '''
         Add components to markdown header. If no header exists, add one.
     '''
     filecontents = filecontents.strip()
     header, remainder = readheader(filecontents)
-    headerkeys = [x.split(':')[0] for x in header]
+    headerkeys = [x.split(':')[0] for x in header] + list(thisyaml.keys())
+    print ("addheaderfunc", headerkeys)
     comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
     header = comments+header
     if 'csl' not in headerkeys and cslfilepath != 'null':
         header.append('csl: {}'.format(cslfilepath))
+        print ("adding csl now...", header)
     if 'bibliography' not in headerkeys:
         header.append('bibliography: {}'.format(bibtexfile))
-    else:
-        header[header.index([y for y in header if y.startswith("bibliography")][0])] = 'bibliography: {}'.format(bibtexfile)
     return '---\n{}\n---\n{}'.format('\n'.join(header), remainder)
 
 #-------------

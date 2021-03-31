@@ -306,6 +306,7 @@ def readheader(filecontents):
 def addheader(filecontents, thisyaml, bibtexfile, cslfilepath='null'):
     '''
         Add components to markdown header. If no header exists, add one.
+        obselete
     '''
     filecontents = filecontents.strip()
     header, remainder = readheader(filecontents)

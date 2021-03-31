@@ -31,19 +31,19 @@ parser.add_argument('-f', '--filepath', default=None,                           
 parser.add_argument('-b', '--bibfile', default=config['default_bibfile'],           help='bibfile')
 parser.add_argument('-c', '--cslfile', default=config['cslfile'],                   help='csl citation styles file', )
 parser.add_argument('-y', '--yaml', default='choose',                               help='use this yaml file with pandoc; use "normal" or "fancy"\
-                    for config set one; the default, "choose", indicates that normal will be used only if there is no yaml in the current file')
+                    for config set one; the default, "choose", indicates that "normal" will be used only if there is no yaml in the current file')
 #---- other options
 parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
 parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],          help='append as many pandoc formats as you want: pdf docx html txt md tex')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False,     help='use only local bib file')
-parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory', )
+parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory')
 parser.add_argument('-img', '--imagedir', default=config['imagedir'],               help='imagedirectoryname')
 parser.add_argument('-i', '--include', action="store_false", default=True,          help='do NOT include files')
 parser.add_argument('-m', '--messy', action="store_true", default=False,            help='disable clean up of intermediate files')
 parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
 parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False,    help='use pandoc-mermaid-filter')
-parser.add_argument('-lt', '--latex_template', default='', help='a latex template to be passed to pandoc')
-parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired') # e.g. a letter format
+parser.add_argument('-lt', '--latex_template', default='', help='a latex template to be passed to pandoc') # e.g. a letter format
+parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
 parser.add_argument('-redact', '--redact', action="store_true", default=False,      help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
 parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
@@ -70,6 +70,7 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         citefunctions.check_dir(pandocoutpath)
     filestem = '.'.join(filename.split('.')[:-1])
     bibout = os.path.join(sourcepath, "cs.bib")
+    # find YAML
     yamlsource = args.filepath
     if args.yaml=="choose":
         if len(citefunctions.getyaml(args.filepath, do_includes=args.include)) == 0:
@@ -207,8 +208,6 @@ if len(svgs)>0:
 #-----------------
 # save new text file
 cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
-if input_file_extension in ['md', 'markdown']:
-    text = citefunctions.addheader(text, yamldata, os.path.abspath(bibout), cslpath)
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
     print ("outputfile:", outputfile)

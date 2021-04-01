@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import json
+import yaml
 import select
 import difflib
 import calendar
@@ -258,18 +259,33 @@ def findreplace(inputtext, replacefile):
 def getyaml(filepath, do_includes=True):
     if do_includes:
         text = include.parse_includes(filepath)
-        y = readheader(text)
     else:
         with open(filepath) as f:
-            y = readheader(f.read())
+            text = f.read()
+    filextension = os.path.split(filepath)[1].strip().split(".")[-1]
+    if filextension in ["yaml","yml"]:
+        y = readheader(text)
+    else:
+        y = readheader(text)
     yml = {}
-    for line in y[0]:
-        line = line.split(": ")
-        if len(line)>1:
-            yml[line[0]]=line[1]
-        else:
-            yml[line[0]]=""
+    gen = yaml.safe_load_all(y[0])
+    # load_all returns a generator object. Take the first one.
+    for generator_item in gen:
+        yml = generator_item
+        break
+    print ("loaded YAML:", filepath, yml)
     return yml
+
+def mergeyaml(priority_yaml, extra_yaml):
+    if not(priority_yaml):
+        priority_yaml = {}
+    if extra_yaml:
+        for item in extra_yaml:
+            try:
+                priority_yaml[item]
+            except:
+                priority_yaml[item] = extra_yaml[item]
+    return priority_yaml
 
 def readheader(filecontents):
     '''
@@ -279,13 +295,12 @@ def readheader(filecontents):
     '''
     t = filecontents.strip()
     t = t.replace('\r','\n')
-    header = []
+    h = ""
     remainder = filecontents
     lines = [x for x in t.split('\n')] # don't strip because indentation matters
     if lines[0]=='---':
         h1 = re.findall( '---[\s\S]+?---',filecontents)
         h2 = re.findall( '---[\s\S]+?\.\.\.',filecontents)
-
         if len(h1)>0 and len(h2)>0:
             #print ("both yaml header formats match! Taking the shorter one")
             if len(h1[0]) < len(h2[0]):
@@ -298,27 +313,8 @@ def readheader(filecontents):
             h = h1[0]
         elif len(h2)>0:
             h = h2[0]
-        if len(h)>0:
-            header = h.split('\n')[1:-1]
         remainder = filecontents.replace(h,'')
-    return header, remainder
-
-def addheader(filecontents, thisyaml, bibtexfile, cslfilepath='null'):
-    '''
-        Add components to markdown header. If no header exists, add one.
-        obselete
-    '''
-    filecontents = filecontents.strip()
-    header, remainder = readheader(filecontents)
-    headerkeys = [x.split(':')[0] for x in header] + list(thisyaml.keys())
-    comments = ['# THIS IS NOT THE MASTER FILE','# ANY CHANGES HERE WILL BE OVERWRITTEN']
-    header = comments+header
-    if 'csl' not in headerkeys and cslfilepath != 'null':
-        header.append('csl: {}'.format(cslfilepath))
-    if 'bibliography' not in headerkeys:
-        header.append('bibliography: {}'.format(bibtexfile))
-    return '---\n{}\n---\n{}'.format('\n'.join(header), remainder)
-
+    return h, remainder
 #-------------
 
 def flatten(thislist):

@@ -1,0 +1,70 @@
+name: make_pdf
+
+on: push
+
+jobs:
+  convert_via_pandoc:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: get citeswitcher
+        uses: actions/checkout@v2
+        with:
+          repository: baillielab/citeswitcher
+          ref: develop
+          path: citeswitcher
+
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install setuptools
+          pip install wheel
+          pip install pyparsing
+          pip install requests
+          pip install biopython
+          pip install pandas
+          pip install tabulate
+
+      - name: fix citations
+        run: |
+          python citeswitcher/fixcitations.py -f sf94.md -l -m
+
+      - name: ls
+        run: |
+          echo "---"
+          ls -l
+          echo "---"
+          pwd -P
+
+      - name: run_pandoc
+        uses: docker://pandoc/latex
+        with:
+          args: >-  # allows you to break string into multiple lines
+            --standalone
+            --filter pandoc-crossref
+            --citeproc
+            --pdf-engine=xelatex
+            --output=sf94.pdf
+            sf94.yaml
+            sf94.citemd.md
+
+      - name: Commit pdf if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add sf94.pdf
+          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf"
+
+      - name: Push pdf
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+
+

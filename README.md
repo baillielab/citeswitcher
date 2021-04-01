@@ -34,24 +34,24 @@ For basic function of fixcitations.py:
 - pyparsing 2.4.7
 - requests-2.24.0
 - biopython
+- pyyaml
 - bibtexparser is also required but it is included in this git repository (because I was concerned that it may not be well maintained)
 
 To install these:
 `pip install pyparsing`
 `pip install requests`
 `pip install biopython`
+`pip install pyyaml`
 
 ## For pdf, docx and html outputs
 
-You'll want to have pandoc properly installed with crossref and citeproc so that you can automatically generate printable documents.
+You'll want to have pandoc properly installed with crossref so that you can automatically generate printable documents.
 
 pandoc
 pandoc-crossref
-pandoc-citeproc
 
 This can be done with conda, or pip.
 `pip install pandoc-crossref`
-`pip install pandoc-citeproc`
 
 ## Optional additional requirements
 
@@ -102,16 +102,12 @@ Required:
 Optional:
 
 - *bib file*.
-	A bibtex file to use. If not specified, a new `myfile.bib` file will be created in the same directory as your input file. You can also specify a global bib file for keeping a shared bank of references.
-- *csl file*.
-	You can add a csl file to the same directory as the md file, and then direct pandoc to it using yaml. That simply means putting this exact text at the top of your md file or in a separate YAML file:
-	```
-	---
-	csl: myfile.csl
-	---
-	```
+	A bibtex file to use. If not specified, a new `cs.bib` file will be created in the same directory as your input file. You can also specify a global bib file for keeping a shared bank of references.
 - *yaml file*.
-	You can specify an external YAML file
+	A yaml file called <filestem>.yaml will be automatically created in the same directory as your file. If it already exists, it will be augmented to add csl and bib files if needed.
+	YAML is taken according to the following hierarchy: in-file YAML, <filestem>.yaml, other yaml files. All will be copied into the <filestem>.yaml file.
+- *csl file*.
+	You can specify a csl file using yaml.
 - *replace.json file*.
 	A file called `replace.json` will be read as a dictionary of text strings to find:replace. If you just create this file and leave it in the same directory as the input file, it will be read.
 
@@ -135,8 +131,7 @@ If `-p` is specified, `-o` must be md. If both `-p` and `-o` are specified and `
 | arg | long arg| action|
 |----|--------------|---------------------------|
 | -b | --bibfile | bibfile |
-| -c | --cslfile | csl citation styles file |
-| -y | --yaml | use this yaml file with pandoc; use "normal" or "fancy"; "choose" indicates that normal will be used only if there is no yaml in the current file|
+| -y | --yaml | specify a yaml file to use as a source for yaml; use "normal" or "fancy" to copy from sup-files/yaml|
 | -o | --outputstyle | choices=md,markdown,tex,latex,pubmed,pmid,inline; output references format |
 | -p | --pandoc_outputs | append as many pandoc formats as you want: pdf docx html txt md tex |
 | -l | --localbibonly | use only local bib file |

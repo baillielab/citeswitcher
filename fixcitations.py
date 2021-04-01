@@ -6,6 +6,7 @@
 import os
 import io
 import sys
+import yaml
 import subprocess
 #-------------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
@@ -29,12 +30,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filepath', default=None,                               help='filepath') # - *** essential ***
 #---- additional files to specify
 parser.add_argument('-b', '--bibfile', default=config['default_bibfile'],           help='bibfile')
-parser.add_argument('-c', '--cslfile', default=config['cslfile'],                   help='csl citation styles file', )
-parser.add_argument('-y', '--yaml', default='choose',                               help='use this yaml file with pandoc; use "normal" or "fancy"\
-                    for config set one; the default, "choose", indicates that "normal" will be used only if there is no yaml in the current file')
+parser.add_argument('-y', '--yaml', default='auto'  ,                               help='use this yaml file as a source; use "normal" or "fancy" to use templates')
 #---- other options
 parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
-parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],          help='append as many pandoc formats as you want: pdf docx html txt md tex')
+parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],       help='append as many pandoc formats as you want: pdf docx html txt md tex')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False,     help='use only local bib file')
 parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory')
 parser.add_argument('-img', '--imagedir', default=config['imagedir'],               help='imagedirectoryname')
@@ -48,12 +47,14 @@ parser.add_argument('-redact', '--redact', action="store_true", default=False,  
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
 parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
-parser.add_argument('-w', '--wholereference', action="store_true", default=False,          help='try to match whole references.')
-parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,          help='use pandoc --top-level-division=chapter')
+parser.add_argument('-w', '--wholereference', action="store_true", default=False,   help='try to match whole references.')
+parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,     help='use pandoc --top-level-division=chapter')
 parser.add_argument('-svg', '--convert_svg', action="store_true", default=False,          help='convert svg images to pdf - replaces any pdf files with the same name')
 parser.add_argument('-ui', '--uncomment_images', action="store_true", default=False,          help='include images commented out using html syntax <!--![]()\{\} -->')
 parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False,          help='force all citation references into lowercase')
 args = parser.parse_args()
+#-------------------
+default_localbib = "cs.bib"
 #-------------------
 if args.filepath:
     args.filepath = os.path.abspath(os.path.expanduser(args.filepath))
@@ -69,45 +70,25 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
     if pandocoutpath != '':
         citefunctions.check_dir(pandocoutpath)
     filestem = '.'.join(filename.split('.')[:-1])
-    bibout = os.path.join(sourcepath, "cs.bib")
-    # find YAML
-    yamlsource = args.filepath
-    if args.yaml=="choose":
-        if len(citefunctions.getyaml(args.filepath, do_includes=args.include)) == 0:
-            # then there is no yaml in this input file. Now look for a bespoke local yaml file
-            localyaml = citefunctions.newext(args.filepath ,".yaml")
-            print (localyaml)
-            if os.path.exists(localyaml):
-                print ("exists")
-                print (citefunctions.getyaml(localyaml))
-                if len(citefunctions.getyaml(localyaml)) == 0:
-                    args.yaml = "normal"
-                else:
-                    print ("YAML settings being read from local yaml file: {}".format(localyaml))
-                    args.yaml = localyaml
-            else:
-                args.yaml = "normal"
-    configyamlpath = os.path.join(config['yamldir'], args.yaml+".yaml")
-    if not (args.yaml.endswith(".yaml") or args.yaml.endswith(".yml")):
-        # then this isn't a user-defined yaml file. Search config files.
-        print ("configyamlpath:", configyamlpath)
-        if os.path.exists(configyamlpath):
-            print ("exists")
-            yamlsource = configyamlpath
+    # find YAML according the YAML hierarchy: infile, local.yaml, other
+    yamlsources = ['.'.join(x.split(".")[:-1]) for x in os.listdir(config['yamldir'])]
+    yamlfile = os.path.join(sourcepath, filestem+".yaml")
+    workingyaml = citefunctions.getyaml(args.filepath) # READ FROM INPUT FILE FIRST
+    if os.path.exists(yamlfile):
+        workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(yamlfile))
+    if args.yaml in yamlsources:
+        workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(os.path.join(config['yamldir'],args.yaml+".yaml")))
+    if 'csl' in workingyaml:
+        if not os.path.exists(workingyaml['csl']):
+            workingyaml = citefunctions.mergeyaml(workingyaml, {'csl':config["cslfile"]})
+    if 'bibliography' in workingyaml.keys():
+        print ('using yaml-specified bib: {}'.format(workingyaml['bibliography']))
     else:
-        possible_yamlpath1 = os.path.abspath(os.path.join(sourcepath, args.yaml))
-        print ("checking for yaml here: {}".format(possible_yamlpath1))
-        if os.path.exists(possible_yamlpath1): # read user-specified yaml file
-            yamlsource = possible_yamlpath1
-        else:
-            print ("YAML file ({}) not found. Please specify path relative to input file.\n Proceeding with in-file YAML.".format(configyamlpath))
-    yamldata = citefunctions.getyaml(yamlsource, do_includes=args.include)
-    if 'bibliography' in yamldata.keys():
-        bibout = yamldata['bibliography']
-        print ('using yaml-specified bib from {}: {}'.format(yamlsource, yamldata['bibliography']))
-        yamlbib = True
-    bibout = os.path.abspath(bibout)
-    print ("Using {} as bibout".format(bibout))
+        workingyaml['bibliography'] = default_localbib
+    print ("Using {} as bibout".format(workingyaml['bibliography']))
+    with open(yamlfile,"w") as o:
+        o.write('---\n{}\n---'.format(yaml.dump(workingyaml)).replace("\n\n","\n"))
+
 #-------------------
 if len(args.pandoc_outputs) > 0:  # if -p is set
     if args.outputstyle not in ['null','md','markdown']: # and -o is not md
@@ -160,16 +141,18 @@ if len(args.pandoc_outputs)>0 or args.stripcomments:
     text = include.stripcomments(text)
 if args.move_figures:
     text = citefunctions.move_figures(text)
+text = citefunctions.readheader(text)[1]
 if args.verbose:
     print ("read input file: ", args.filepath)
 #-------------------
-bib.db = citefunctions.read_bib_files([bibout])
+localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
+bib.db = citefunctions.read_bib_files([localbibpath])
 if args.localbibonly:
-    print ("\n*** reading local bib file only: {} ***\n".format(bibout))
+    print ("\n*** reading local bib file only: {} ***\n".format(localbibpath))
     bib.full_bibdat = bib.db
 else:
-    if args.verbose: print ("reading bibfiles:", args.bibfile, bibout)
-    bib.full_bibdat = citefunctions.read_bib_files([args.bibfile, bibout])
+    if args.verbose: print ("reading bibfiles:", args.bibfile, localbibpath)
+    bib.full_bibdat = citefunctions.read_bib_files([args.bibfile, localbibpath])
 if args.force_lowercase_citations:
     print ("forcing lowercase citations")
     bib.id_to_lower()
@@ -179,8 +162,8 @@ bib.make_alt_dicts()
 text = citefunctions.replace_blocks(text, args.outputstyle, use_whole=args.wholereference, flc=args.force_lowercase_citations)
 #-----------------
 # save remote bibliography
-print ('\nsaving remote bibliography for this file here:', bibout)
-with open(bibout, 'w') as bf:
+print ('\nsaving remote bibliography for this file here:', localbibpath)
+with open(localbibpath, 'w') as bf:
     bibtexparser.dump(bib.db, bf)
 #-----------------
 '''
@@ -207,7 +190,6 @@ if len(svgs)>0:
         print("use the -svg argument to convert these to pdfs with the same name and include them\n")
 #-----------------
 # save new text file
-cslpath = os.path.abspath(os.path.join(os.path.dirname(__file__), args.cslfile))
 with io.open(outputfile, 'w', encoding='utf-8') as file:
     file.write(text+"\n\n")
     print ("outputfile:", outputfile)
@@ -216,9 +198,6 @@ if len(args.pandoc_outputs)>0:
     # run pandoc
     workingdir, filename = os.path.split(os.path.abspath(outputfile))
     os.chdir(workingdir)
-    yamlinstruction = ""
-    if yamlsource != args.filepath:
-        yamlinstruction = yamlsource #NB this is concatenated with the input file by pandoc
     for thisformat in args.pandoc_outputs:
         pargstring = ""
         if thisformat == "pdf" or thisformat =="tex":
@@ -231,7 +210,7 @@ if len(args.pandoc_outputs)>0:
         citefunctions.callpandoc(filename,
                     '.{}'.format(thisformat),
                     pargs=pargstring,
-                    yaml=yamlinstruction,
+                    yaml=yamlfile,
                     out_dir=pandocoutpath,
                     x=args.xelatex,
                     ch=args.chaptermode,

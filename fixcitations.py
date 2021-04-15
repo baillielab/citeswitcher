@@ -78,9 +78,8 @@ with citefunctions.cd(os.path.split(args.filepath)[0]):
         workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(yamlfile))
     if args.yaml in yamlsources:
         workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(os.path.join(config['yamldir'],args.yaml+".yaml")))
-    if 'csl' in workingyaml:
-        if not os.path.exists(workingyaml['csl']):
-            workingyaml = citefunctions.mergeyaml(workingyaml, {'csl':config["cslfile"]})
+    if ('csl' not in workingyaml) or not os.path.exists(workingyaml['csl']):
+        workingyaml = citefunctions.mergeyaml(workingyaml, {'csl':config["cslfile"]})
     if 'bibliography' in workingyaml.keys():
         print ('using yaml-specified bib: {}'.format(workingyaml['bibliography']))
     else:
@@ -173,9 +172,13 @@ if len(bib.newpmids)>0:
         ('&term='.join(["{}[pmid]".format(x) for x in pmids_to_add_to_inputdb])))
 '''
 #-----------------
+if "replace" in workingyaml.keys():
+    text = citefunctions.findreplace(text, workingyaml["replace"])
 replacefile = os.path.join(sourcepath, "replace.json")
 if os.path.exists(replacefile):
-    text = citefunctions.findreplace(text, replacefile)
+    with open(replacefile) as rf:
+        replacedic = json.load(rf)
+    text = citefunctions.findreplace(text, replacedic)
 #-----------------
 print ("Word count: {}\n".format(wordcount.wordcount(text)))
 #-----------------

@@ -248,11 +248,9 @@ def sort_db(thisdb, sortby="year"):
     thisdb.entries = [thisdb.entries_dict[thisid] for thisid in theseids]
 
 #-------------
-def findreplace(inputtext, replacefile):
-    with open(replacefile) as rf:
-        frdict = json.load(rf)
+def findreplace(inputtext, frdict):
     for f in frdict:
-        inputtext = inputtext.replace(f, frdict[f])
+        inputtext = inputtext.replace(f, str(frdict[f]))
     return inputtext
 
 #-------------

@@ -30,17 +30,11 @@ jobs:
           pip install biopython
           pip install pandas
           pip install tabulate
+          pip install pyyaml
 
       - name: fix citations
         run: |
-          python citeswitcher/fixcitations.py -f sf94.md -l -m
-
-      - name: ls
-        run: |
-          echo "---"
-          ls -l
-          echo "---"
-          pwd -P
+          python citeswitcher/fixcitations.py -f manuscript.md -l
 
       - name: run_pandoc
         uses: docker://pandoc/latex
@@ -50,16 +44,18 @@ jobs:
             --filter pandoc-crossref
             --citeproc
             --pdf-engine=xelatex
-            --output=sf94.pdf
-            sf94.yaml
-            sf94.citemd.md
+            --output=manuscript.citemd.pdf
+            manuscript.yaml
+            manuscript.citemd.md
 
       - name: Commit pdf if changed
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add sf94.pdf
-          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf"
+          git add cs.bib
+          git add manuscript.yaml
+          git add manuscript.citemd.pdf
+          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf and cs.bib"
 
       - name: Push pdf
         uses: ad-m/github-push-action@master

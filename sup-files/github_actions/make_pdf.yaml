@@ -44,6 +44,7 @@ jobs:
             --filter pandoc-crossref
             --citeproc
             --pdf-engine=xelatex
+            --resource-path=./
             --output=manuscript.citemd.pdf
             manuscript.yaml
             manuscript.citemd.md

@@ -40,7 +40,7 @@ def getconfig(cfgfile="null"):
     for item in data:
         if type(data[item]) is str:
             if data[item].startswith("{{scriptpath}}"):
-                data[item] = os.path.join(scriptpath, data[item].replace("{{scriptpath}}",""))
+                data[item] = os.path.relpath(os.path.join(scriptpath, data[item].replace("{{scriptpath}}","")))
     try:
         Entrez.email = data['email']
     except:

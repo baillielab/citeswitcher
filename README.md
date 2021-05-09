@@ -1,10 +1,8 @@
 <!--
 TODO
 
-Change supfile names to be clear they are auto generated. 
-Use one bib file per directory e.g. local.bib
-cs_local.bib
-cs_replace.json
+ADD stripreferences function to remove all confirmed references
+
 -->
 
 

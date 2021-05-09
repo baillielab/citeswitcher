@@ -275,6 +275,7 @@ def getyaml(filepath, do_includes=True):
     return yml
 
 def mergeyaml(priority_yaml, extra_yaml):
+    # keep the contents of the first yaml if there is a conflict
     if not(priority_yaml):
         priority_yaml = {}
     if extra_yaml:

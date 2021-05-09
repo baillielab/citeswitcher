@@ -64,14 +64,13 @@ else:
     print ("python fixcitations.py -f {} -o md".format(os.path.abspath(config['testfile'])))
     print ("and navigate to this directory to see the output: {}\n".format(os.path.split(config['testfile'])[0]))
     sys.exit()
-#with citefunctions.cd(os.path.split(args.filepath)[0]):
-args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
 sourcepath, filename = os.path.split(args.filepath)
 pandocoutpath = os.path.join(sourcepath, args.outputsubdir)
 if pandocoutpath != '':
     citefunctions.check_dir(pandocoutpath)
 filestem = '.'.join(filename.split('.')[:-1])
-# find YAML according the YAML hierarchy: infile, local.yaml, other
+# Find bib, csl and yaml files
+# YAML according the YAML hierarchy: infile, local.yaml, other
 yamlsources = ['.'.join(x.split(".")[:-1]) for x in os.listdir(config['yamldir'])]
 yamlfile = os.path.join(sourcepath, filestem+".yaml")
 workingyaml = citefunctions.getyaml(args.filepath) # READ FROM INPUT FILE FIRST
@@ -79,12 +78,15 @@ if os.path.exists(yamlfile):
     workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(yamlfile))
 if args.yaml in yamlsources:
     workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(os.path.join(config['yamldir'],args.yaml+".yaml")))
+# CSL
 if ('csl' not in workingyaml) or not os.path.exists(workingyaml['csl']):
-    workingyaml = citefunctions.mergeyaml(workingyaml, {'csl':config["cslfile"]})
+    workingyaml['csl'] = config["cslfile"] # HARD OVERWRITE instead of merge
+# BIB
+args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
 if 'bibliography' in workingyaml.keys():
     print ('using yaml-specified bib: {}'.format(workingyaml['bibliography']))
 else:
-    workingyaml['bibliography'] = default_localbib
+    workingyaml['bibliography'] = default_localbib  # HARD OVERWRITE instead of merge
 print ("Using {} as bibout".format(workingyaml['bibliography']))
 with open(yamlfile,"w") as o:
     o.write('---\n{}\n---'.format(yaml.dump(workingyaml)).replace("\n\n","\n"))

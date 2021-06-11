@@ -74,10 +74,13 @@ filestem = '.'.join(filename.split('.')[:-1])
 yamlsources = ['.'.join(x.split(".")[:-1]) for x in os.listdir(config['yamldir'])]
 yamlfile = os.path.join(sourcepath, filestem+".yaml")
 workingyaml = citefunctions.getyaml(args.filepath) # READ FROM INPUT FILE FIRST
+print (workingyaml)
 if os.path.exists(yamlfile):
     workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(yamlfile))
+    print (workingyaml)
 if args.yaml in yamlsources:
     workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(os.path.join(config['yamldir'],args.yaml+".yaml")))
+    print (workingyaml)
 # CSL
 if ('csl' not in workingyaml) or not os.path.exists(workingyaml['csl']):
     workingyaml['csl'] = config["cslfile"] # HARD OVERWRITE instead of merge
@@ -163,8 +166,8 @@ bib.make_alt_dicts()
 # replace the ids in the text with the outputstyle
 text = citefunctions.replace_blocks(text, args.outputstyle, use_whole=args.wholereference, flc=args.force_lowercase_citations)
 #-----------------
-# save remote bibliography
-print ('\nsaving remote bibliography for this file here:', localbibpath)
+# save bibliography
+print ('\nsaving bibliography for this file here:', localbibpath)
 with open(localbibpath, 'w') as bf:
     bibtexparser.dump(bib.db, bf)
 #-----------------
@@ -213,7 +216,7 @@ if len(args.pandoc_outputs)>0:
             if args.pandoc_mermaid:
                 pargstring+="--filter pandoc-mermaid"
                 args.xelatex = True
-        citefunctions.callpandoc(filename,
+        citefunctions.callpandoc(os.path.abspath(outputfile),
                     '.{}'.format(thisformat),
                     pargs=pargstring,
                     yaml=yamlfile,

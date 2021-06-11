@@ -187,8 +187,10 @@ def make_output(thispath, pathtopandoc="pandoc", outputformats=[], localbibonly=
         " ".join(["-p "+x.replace(".","") for x in outputformats]),
         pathtopandoc
         )
-    print (cmd)
-    subprocess.call(cmd, shell=True)
+    with cd(scriptpath):
+        print ("CWD:", os.getcwd())
+        print (cmd)
+        subprocess.call(cmd, shell=True)
 
 def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
     # crossref must come before citeproc
@@ -211,8 +213,10 @@ def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pat
     else:
         if out_ext not in ['.html']:
             cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT/HTML OUT
-    print (cmd)
-    subprocess.call(cmd, shell=True)
+    with cd(scriptpath):
+        print ("CWD:", os.getcwd())
+        print (cmd)
+        subprocess.call(cmd, shell=True)
 
 def read_bib_files(bibfiles):
     bfs = ""

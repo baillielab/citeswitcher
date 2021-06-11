@@ -4,9 +4,11 @@
 import io
 import os
 import re
+import sys
 import pandas as pd
 import numpy as np
 from tabulate import tabulate
+from requests import get  # to make GET request
 #-----------------------------
 '''
 RULES:
@@ -60,7 +62,7 @@ def get_includes(thistext):
         if "INCLUDESECTION" in x and not "#INCLUDESECTION" in x:
             includedict[x] = get_filename(x)
     for x in re.findall(md_include_format, thistext):
-        includedict[x] = filepath = os.path.normpath(os.path.expanduser(x[2:-2].strip()))
+        includedict[x] = os.path.expanduser(x[2:-2].strip())
     return includedict
 
 def clear_nan(thisdf):
@@ -155,7 +157,6 @@ def include_df(thisfile, filetype="xlsx"):
     #print (df)
     return tabulate(df, tablefmt="simple", headers="keys")
 
-
 def parse_includes(thisfile, verbose=False):
     '''
         read file and return text with includes
@@ -165,10 +166,12 @@ def parse_includes(thisfile, verbose=False):
             with io.open(thisfile, "r", encoding="utf-8") as f:
                 text = f.read()
         except:
-            print ("\n\n*** INITIAL INCLUDE I/O PROBLEM (COULD BE DROPBOX): {} ***\n\n".format(thisfile))
+            print ("\n\n*** INITIAL I/O PROBLEM (COULD BE DROPBOX): {} ***\n\n".format(thisfile))
+            sys.exit()
             return ""
     else:
-        print ("\n\n*** INITIAL INCLUDE FILE NOT FOUND: {} ***\n\n".format(thisfile))
+        print ("\n\n*** INITIAL FILE NOT FOUND: {} ***\n\n".format(thisfile))
+        sys.exit()
         return ""
 
     filedir = os.path.split(os.path.abspath(thisfile))[0]
@@ -183,6 +186,8 @@ def parse_includes(thisfile, verbose=False):
                     print ("[include.py] including:", filepath)
                 if not filepath.endswith('.xlsx'): # don't try to read excel directly
                     newtext = parse_includes(filepath)
+            elif filepath.startswith("http"):
+                pass
             else:
                 print ("\n\n*** INCLUDE FILE NOT FOUND: ***\n{}".format(filepath))
                 print ("*** path: {} ***".format(os.path.abspath(filepath)))
@@ -190,7 +195,9 @@ def parse_includes(thisfile, verbose=False):
                 continue
             for inc in includes:
                 if includes[inc] == filepath:
-                    if filepath.endswith('.xlsx'):
+                    if filepath.startswith('http'):
+                        newtext = get(filepath).text
+                    elif filepath.endswith('.xlsx'):
                         newtext = include_df(filepath, filetype="xlsx")
                     elif filepath.endswith('.csv'):
                         newtext = include_df(filepath, filetype="csv")

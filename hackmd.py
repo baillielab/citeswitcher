@@ -73,7 +73,12 @@ else:
                 print (cmd)
                 subprocess.call(cmd, shell=True)
 
-                citefunctions.make_output(os.path.join(thispath, mdfile), pathtopandoc=args.pathtopandoc, localbibonly=args.localbibonly, outputformats=outputformats)
+                citefunctions.make_output(
+                        os.path.abspath(os.path.join(thispath, mdfile)),
+                        pathtopandoc=args.pathtopandoc,
+                        localbibonly=args.localbibonly,
+                        outputformats=outputformats
+                        )
                 # TODO: push latex compilation output to the same folder so that users can see it
 
 

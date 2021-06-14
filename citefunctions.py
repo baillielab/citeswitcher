@@ -40,7 +40,7 @@ def getconfig(cfgfile="null"):
     for item in data:
         if type(data[item]) is str:
             if data[item].startswith("{{scriptpath}}"):
-                data[item] = os.path.relpath(os.path.join(scriptpath, data[item].replace("{{scriptpath}}","")))
+                data[item] = os.path.join(scriptpath, data[item].replace("{{scriptpath}}",""))
     try:
         Entrez.email = data['email']
     except:
@@ -213,7 +213,7 @@ def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pat
     else:
         if out_ext not in ['.html']:
             cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT/HTML OUT
-    with cd(scriptpath):
+    with cd(os.path.split(f)[0]):
         print ("CWD:", os.getcwd())
         print (cmd)
         subprocess.call(cmd, shell=True)

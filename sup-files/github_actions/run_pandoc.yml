@@ -1,0 +1,48 @@
+name: make_pdf
+
+on: push
+
+jobs:
+  convert_via_pandoc:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install setuptools
+          pip install wheel
+          pip install pyparsing
+
+      - name: run_pandoc
+        uses: docker://pandoc/latex
+        with:
+          args: >-  # allows you to break string into multiple lines
+            --standalone
+            --filter pandoc-crossref
+            --citeproc
+            --pdf-engine=xelatex
+            --output=manuscript.pdf
+            manuscript.yaml
+            manuscript.md
+
+      - name: Commit pdfs if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add manuscript.pdf
+          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdfs"
+
+      - name: Push pdf
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+
+

@@ -12,14 +12,18 @@ from requests import get  # to make GET request
 #-----------------------------
 '''
 RULES:
+
+html:
 INCLUDESECTION IN LINE
 #INCLUDESECTION NOT IN LINE
 WHOLE LINE IS REPLACED
 FILENAME IS NEXT WORD AFTER INCLUDESECTION
+
+md:
 OR use {!blah.txt!}
 OR use {!blah.xlsx!}
 
-RULES:
+xlsx:
     - if £ in column name, format currency
     - drop columns beginning with #
 
@@ -28,7 +32,12 @@ RULES:
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 #-----------------------------
 comments = r'<!--[\s\S]+?-->'
-md_include_format = r'{![\s\S]+?!}' # support for markdown-include format: pip install markdown-include
+tex_include_formats = [
+            r'\\input{.+?}',
+            r'\\import{.+?}',
+            r'\\include{.+?}'
+            ] 
+md_include_format = r'{!.+?!}' # support for markdown-include format: pip install markdown-include
 redactionpattern = r"\[STARTREDACT\][\s\S]+?\[ENDREDACT\]"
 #-----------------------------
 class cd:
@@ -61,6 +70,9 @@ def get_includes(thistext):
     for x in re.findall(comments, thistext):
         if "INCLUDESECTION" in x and not "#INCLUDESECTION" in x:
             includedict[x] = get_filename(x)
+    for tex_include_format in tex_include_formats:
+        for x in re.findall(tex_include_format, thistext):
+            includedict[x] = os.path.expanduser(x[7:-1].strip())+".tex"
     for x in re.findall(md_include_format, thistext):
         includedict[x] = os.path.expanduser(x[2:-2].strip())
     return includedict
@@ -71,6 +83,9 @@ def clear_nan(thisdf):
     thisdf = thisdf.replace('NaN', '', regex=True)
     thisdf = thisdf.replace(np.nan, '', regex=True)
     return thisdf
+
+def allintegers(this_series):
+    return np.array_equal(this_series.dropna(), this_series.dropna().astype(int))
 
 '''
 # THIS FUNCTION LEFT HERE FOR NOW BECAUSE IT IS USED FOR BUDGET ELSEWHERE
@@ -98,20 +113,23 @@ def include_df(thisfile, filetype="xlsx"):
     df = clear_nan(df)
     return tabulate(df, tablefmt="grid", headers="keys")
 '''
-def include_df(thisfile, filetype="xlsx"):
+def include_df(thisfile, filetype="xlsx", tf="pipe"):
     '''
-    parse and include excel file
+    parse and include table file
 
     table format options
+    tablefmt="pipe"
+    tablefmt="grid"
     tablefmt="github"
     tablefmt="simple"
-    tablefmt="grid"
-    tablefmt="pipe"
     tablefmt="fancygrid"
     tablefmt="latex"
     plain, simple, github, grid, fancy_grid, pipe,
                           orgtbl, rst, mediawiki, html, latex, latex_raw,
                           latex_booktabs, tsv
+    plain, simple, github, grid, fancy_grid, pipe, orgtbl, jira, presto, 
+    psql, rst, mediawiki, moinmoin, youtrack, html, latex, latex_raw, 
+    latex_booktabs, textile, 
     '''
 
     # BUDGET
@@ -147,7 +165,11 @@ def include_df(thisfile, filetype="xlsx"):
             except:
                 continue
             # round all numeric columns to 2sf
-            df[colname] = df[colname].map("{0:.2g}".format)
+            print (colname, allintegers(df[colname]))
+            if allintegers(df[colname]):
+                df[colname] = df[colname].map("{0:.0f}".format)
+            else:
+                df[colname] = df[colname].map("{0:.2g}".format)
     # format number
     for thiscol in []:
         df[thiscol] = df[thiscol].map("{}".format)
@@ -155,9 +177,18 @@ def include_df(thisfile, filetype="xlsx"):
     # replace all spaces with newline
     #df.rename(columns={x:x.replace(" ","\n") for x in df.columns}, inplace=True)
     #print (df)
-    return tabulate(df, tablefmt="simple", headers="keys")
+    out = tabulate(df, tablefmt=tf, headers="keys")
+    if tf in ["github","simple","grid","pipe","fancygrid"]:
+        # markdown output. Need to manually change latex formatting for italics
+        ilist = re.findall(r"\\textit\{.+?\}", out)
+        for imatch in ilist:
+            out = out.replace(imatch, "*{}*".format(imatch[8:-1]))
+        ilist += re.findall(r"\\emph\{.+?\}", out)
+        for imatch in ilist:
+            out = out.replace(imatch, "*{}*".format(imatch[6:-1]))
+    return out
 
-def parse_includes(thisfile, verbose=False):
+def parse_includes(thisfile, verbose=False, tbf="pipe"):
     '''
         read file and return text with includes
     '''
@@ -165,8 +196,9 @@ def parse_includes(thisfile, verbose=False):
         try:
             with io.open(thisfile, "r", encoding="utf-8") as f:
                 text = f.read()
-        except:
+        except Exception as e:
             print ("\n\n*** INITIAL I/O PROBLEM (COULD BE DROPBOX): {} ***\n\n".format(thisfile))
+            print(e)
             sys.exit()
             return ""
     else:
@@ -177,15 +209,17 @@ def parse_includes(thisfile, verbose=False):
     filedir = os.path.split(os.path.abspath(thisfile))[0]
     with cd(filedir):
         includes = get_includes(text)
+        if verbose:
+            print ("fileincludes:", includes)
         additionalfiles = list(set(includes.values()))
         if verbose:
             print ("[include.py] working in: {}".format(filedir))
         for filepath in additionalfiles:
             if os.path.exists(filepath):
-                if verbose:
-                    print ("[include.py] including:", filepath)
                 if not filepath.endswith('.xlsx'): # don't try to read excel directly
-                    newtext = parse_includes(filepath)
+                    if verbose:
+                        print ("[include.py] including:", filepath)
+                    newtext = parse_includes(filepath, tbf=tbf)
             elif filepath.startswith("http"):
                 pass
             else:
@@ -198,11 +232,11 @@ def parse_includes(thisfile, verbose=False):
                     if filepath.startswith('http'):
                         newtext = get(filepath).text
                     elif filepath.endswith('.xlsx'):
-                        newtext = include_df(filepath, filetype="xlsx")
+                        newtext = include_df(filepath, filetype="xlsx", tf=tbf)
                     elif filepath.endswith('.csv'):
-                        newtext = include_df(filepath, filetype="csv")
+                        newtext = include_df(filepath, filetype="csv", tf=tbf)
                     elif filepath.endswith('.tsv'):
-                        newtext = include_df(filepath, filetype="tsv")
+                        newtext = include_df(filepath, filetype="tsv", tf=tbf)
                     text = text.replace(inc, newtext)
     return text
 
@@ -210,7 +244,12 @@ def stripcomments(thistext):
     return re.sub(comments, "", thistext)
 
 def save_new(thisfile, outputfile="auto", stripc=False, verbose=False):
-    text = parse_includes(thisfile, verbose=verbose)
+    tableformattype = "pipe"
+    if thisfile.endswith(".tex"):
+        tableformattype = "tex"
+    if verbose:
+        print ("tableformattype:", tableformattype)
+    text = parse_includes(thisfile, verbose=verbose, tbf=tableformattype)
     if outputfile == 'auto':
         outputfile = preext(thisfile, 'inc')
     if stripc:
@@ -230,10 +269,11 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filename', default=None,   help='filename')
+    parser.add_argument('-o', '--outputfile', default="auto",   help='outputfile')
     parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
     args = parser.parse_args()
-    save_new(args.filename, outputfile="auto", stripc = args.stripcomments, verbose=args.verbose)
+    save_new(args.filename, outputfile=args.outputfile, stripc = args.stripcomments, verbose=args.verbose)
 
 
 

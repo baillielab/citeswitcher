@@ -8,6 +8,8 @@ ADD stripreferences function to remove all confirmed references
 
 # Citeswitcher
 
+**A new project, [manubot](https://github.com/manubot/manubot), performs some of the functions of citeswitcher and is actively developed by professionals, in contrast to my amateur hacking on this project. Worth a look before you get too deep into citeswitcher...**
+
 For simple collaboration in academic writing. Cite papers as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them and make a common bib file for you, and call pandoc to make a fully referenced pdf, docx or html file.
 
 # TL;DR
@@ -36,10 +38,10 @@ For basic function of fixcitations.py:
 - bibtexparser is also required but it is included in this git repository (because I was concerned that it may not be well maintained)
 
 To install these:
-`pip install pyparsing`
-`pip install requests`
-`pip install biopython`
-`pip install pyyaml`
+pip install pyparsing
+pip install requests
+pip install biopython
+pip install pyyaml
 
 ## For pdf, docx and html outputs
 
@@ -107,7 +109,7 @@ Optional:
 - *csl file*.
 	You can specify a csl file using yaml.
 - *replace.json file*.
-	A file called `replace.json` will be read as a dictionary of text strings to find:replace. If you just create this file and leave it in the same directory as the input file, it will be read.
+	A file called `replace.json` will be read as a dictionary of text strings to find:replace. If you just create this file and leave it in the same directory as the input file, it will be read. An alternative is to specify text to be replaced in a YAML dict format.
 
 The default (in `config.json`) or specified .bib file will be searched for the relevant citations.
 Citations will be replaced with a citaion in either .md or .tex or PMID format.
@@ -139,6 +141,7 @@ If `-p` is specified, `-o` must be md. If both `-p` and `-o` are specified and `
 | -mf | --move_figures | move all figures to the end and create captions section for submission to journal |
 | -pm | --pandoc_mermaid | use pandoc-mermaid-filter |
 | -lt | --latex_template | a latex template to be passed to pandoc |
+| -wt | --word_template | a word template to be passed to pandoc |
 | -ptp | --pathtopandoc | specify a particular path to pandoc if desired') # e.g. a letter forma |
 | -redact | --redact | redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags |
 | -s | --stripcomments | stripcomments in html format |

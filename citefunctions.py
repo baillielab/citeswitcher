@@ -70,6 +70,14 @@ latexbrackets = '\\\cite\{[\s\S]+?\}'
 pubmedsearchstrings = ["PMID:", "PubMed:"]
 mdsearchstrings = ["@"]
 doisearchstrings = [
+            "doi: https://doi.org/",
+            "doi: http://doi.org/",
+            "doi: http://dx.doi.org/",
+            "doi: https://dx.doi.org/",
+            "doi:https://doi.org/",
+            "doi:http://doi.org/",
+            "doi:http://dx.doi.org/",
+            "doi:https://dx.doi.org/",
             "doi:",
             "https://doi.org/",
             "http://doi.org/",
@@ -123,12 +131,14 @@ def uncomment_images(thistext):
     return thistext
 
 def move_figures(thistext, dropfilepath=True):
-    figureformat = '!\[.*?\]\(.*?\).*?\n'
+    #figureformat = '!\[.*?\]\(.*?\).*?\n'
+    figureformat = '!\[[\s\S]+?\]\([\s\S]+?\).*?\n'
     blank_svg = os.path.abspath(os.path.join(scriptpath, "sup-files/no_image.svg"))
     figures_found = list(set(re.findall(figureformat, thistext)))
     lines = [x for x in thistext.split("\n")]
     lines.reverse()
     for x in lines:
+        # remove references line. why?
         if len(x.strip()) > 0:
             if x.startswith("#") and "Reference" in x:
                 rline = x+"\n"
@@ -201,7 +211,7 @@ def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pat
             pargs,
             yaml,
             f,
-            os.path.join(out_dir, newext(f, out_ext))
+            os.path.join(out_dir, os.path.split(newext(f, out_ext))[-1])
         )
     if x:
         cmd += " --pdf-engine=xelatex "
@@ -260,7 +270,10 @@ def findreplace(inputtext, frdict):
 #-------------
 def getyaml(filepath, do_includes=True):
     if do_includes:
-        text = include.parse_includes(filepath)
+        opf = "md"
+        if filepath.endswith(".tex"):
+            opf = "tex"
+        text = include.parse_includes(filepath, tbf=opf)
     else:
         with open(filepath) as f:
             text = f.read()
@@ -708,7 +721,7 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
         if len(thesemissing) > 0:
             blockstring += "[***{}]".format(', '.join(thesemissing))
     elif outputstyle == "tex":
-        blockstring += "\\cite\{{}\}".format(', '.join(theseids))
+        blockstring += "\\cite{%s}"%(', '.join(theseids))
         if len(thesemissing) > 0:
             blockstring += "[**{}]".format(', '.join(thesemissing))
     elif outputstyle == "inline":

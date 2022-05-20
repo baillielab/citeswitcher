@@ -14,17 +14,7 @@ https://stackoverflow.com/questions/49321998/bibtexparser-pyparsing-parseexcepti
 
 #-------------------
 import os
-import io
 import sys
-import json
-import subprocess
-#-------------------
-scriptpath = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.join(scriptpath, 'python-bibtexparser-master/'))
-import bibtexparser
-from bibtexparser.bparser import BibTexParser
-from bibtexparser.bwriter import BibTexWriter
-from bibtexparser.bibdatabase import BibDatabase
 #-------------------
 import citefunctions
 config = citefunctions.getconfig()
@@ -33,10 +23,28 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['zotero_bibfile'])
 parser.add_argument('-o', '--outbib',    help='outbib', default=config['default_bibfile'])
+parser.add_argument('-mt', '--mtime_range', type=int, help='modified time range(seconds)', default=0)
 args = parser.parse_args()
-#-------------------
 bibfile = os.path.expanduser(args.bibfile)
 outbib = os.path.expanduser(args.outbib)
+#-------------------
+import time
+t = time.time() - os.path.getmtime(bibfile)
+if t < args.mtime_range:
+    print ("bibfile {} last modified {} seconds ago. Proceeding...".format(bibfile, t))
+else:
+    print ("No changes to bibfile {} for {} seconds".format(bibfile, t))
+    sys.exit()
+#-------------------
+import io
+import json
+import subprocess
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(scriptpath, 'python-bibtexparser-master/'))
+import bibtexparser
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.bwriter import BibTexWriter
+from bibtexparser.bibdatabase import BibDatabase
 #-------------------
 speedup_store = outbib.replace('.bib','.json')
 bibdat = citefunctions.read_bib_files([bibfile])

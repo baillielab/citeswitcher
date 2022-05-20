@@ -3,17 +3,51 @@
 \documentclass[$size$]{letter}
 \usepackage[letterpaper,margin=1in]{geometry}
 
-\usepackage{xcolor}
-\usepackage{tcolorbox}
-\newtcolorbox{myquote}{colback=blue!5, colframe=lightgray!20}
-\renewenvironment{quote}{\begin{myquote}}{\end{myquote}}
+
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+
+$if(csl-refs)$
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newenvironment{CSLReferences}%
+  {$if(csl-hanging-indent)$\setlength{\parindent}{0pt}%
+  \everypar{\setlength{\hangindent}{\cslhangindent}}\ignorespaces$endif$}%
+  {\par}
+$endif$ 
 
 \usepackage{fixltx2e}
 
-% Adds microtypography features: character protrusion, for XeTeX.
-\usepackage{microtype}
-
 % Allows links.
+\usepackage[usenames,dvipsnames]{color}
 \usepackage[xetex, bookmarks, colorlinks, breaklinks]{hyperref}
 \hypersetup{colorlinks=true, urlcolor=NavyBlue, linkcolor=NavyBlue}
 
@@ -97,4 +131,54 @@ $if(ps)$
     $ps$
 $endif$
 
+\textbf{References}
+
+$if(has-frontmatter)$
+\backmatter
+$endif$
+
+$if(natbib)$
+$if(bibliography)$
+$if(biblio-title)$
+$if(has-chapters)$
+\renewcommand\bibname{$biblio-title$}
+$else$
+\renewcommand\refname{$biblio-title$}
+$endif$
+$endif$
+
+
+$if(beamer)$
+\begin{frame}[allowframebreaks]{$biblio-title$}
+  \bibliographytrue
+$endif$
+
+  \bibliography{$for(bibliography)$$bibliography$$sep$,$endfor$}
+
+$if(beamer)$
+\end{frame}
+$endif$
+
+$endif$
+$endif$
+
+$if(biblatex)$
+$if(beamer)$
+\begin{frame}[allowframebreaks]{$biblio-title$}
+  \bibliographytrue
+  \printbibliography[heading=none]
+\end{frame}
+$else$
+\printbibliography$if(biblio-title)$[title=$biblio-title$]
+$endif$
+
+$endif$
+$endif$
+
+
+
 \end{document}
+
+
+
+

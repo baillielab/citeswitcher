@@ -34,13 +34,13 @@ jobs:
           pip install tabulate
           pip install pyyaml
 
-      - name: fix citations
-        run: |
-          python citeswitcher/fixcitations.py -f manuscript.md -l 
-
       - name: mkdir
         run: |
           mkdir -p auto-generated
+
+      - name: fix citations
+        run: |
+          python citeswitcher/fixcitations.py -f manuscript.md -l -d auto-generated
 
       - name: run_pandoc1
         uses: docker://pandoc/latex
@@ -53,7 +53,7 @@ jobs:
             --resource-path=./
             --output=auto-generated/manuscript.citemd.pdf
             manuscript.yaml
-            manuscript.citemd.md
+            auto-generated/manuscript.citemd.md
 
       - name: run_pandoc1
         uses: docker://pandoc/latex
@@ -66,7 +66,7 @@ jobs:
             --resource-path=./
             --output=auto-generated/manuscript.citemd.docx
             manuscript.yaml
-            manuscript.citemd.md
+            auto-generated/manuscript.citemd.md
 
       - name: Commit pdf if changed
         run: |

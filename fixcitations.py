@@ -83,11 +83,11 @@ if 'csl' in workingyaml:
         workingyaml['csl'] = workingyaml['csl'] + '.csl'
     if not os.path.exists(workingyaml['csl']):
         # try to find it in the sup-files folder
-        newcsl = os.path.join(config['csldir'], os.path.split(workingyaml['csl'])[-1])
+        newcsl = os.path.relpath(os.path.join(config['csldir'], os.path.split(workingyaml['csl'])[-1]))
         if os.path.exists(newcsl):
             workingyaml['csl'] = newcsl
 if 'csl' not in workingyaml:
-    workingyaml['csl'] = os.path.join(config["csldir"], config["csldefault"]) # HARD OVERWRITE instead of merge
+    workingyaml['csl'] = os.path.relpath(os.path.join(config["csldir"], config["csldefault"])) # HARD OVERWRITE instead of merge
 # BIB
 args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
 if 'bibliography' in workingyaml.keys():

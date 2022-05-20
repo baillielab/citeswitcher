@@ -1,6 +1,8 @@
 name: make_pdf
 
-on: push
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   convert_via_pandoc:

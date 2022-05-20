@@ -40,7 +40,7 @@ jobs:
 
       - name: mkdir
         run: |
-          mkdir auto-generated
+          mkdir -p auto-generated
 
       - name: run_pandoc1
         uses: docker://pandoc/latex

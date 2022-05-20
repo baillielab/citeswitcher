@@ -64,9 +64,9 @@ else:
     print ("and navigate to this directory to see the output: {}\n".format(os.path.split(config['testfile'])[0]))
     sys.exit()
 sourcepath, filename = os.path.split(args.filepath)
-pandocoutpath = os.path.join(sourcepath, args.outputsubdir)
-if pandocoutpath != '':
-    citefunctions.check_dir(pandocoutpath)
+outpath = os.path.join(sourcepath, args.outputsubdir)
+if outpath != '':
+    citefunctions.check_dir(outpath)
 filestem = '.'.join(filename.split('.')[:-1])
 # Find bib, csl and yaml files
 # YAML according the YAML hierarchy: infile, local.yaml, other
@@ -137,7 +137,7 @@ elif args.outputstyle == 'latex' or args.outputstyle == 'tex':
     citelabel = ".citetex."
 elif args.outputstyle == 'inline':
     print("outputstyle = inline")
-outputfile = os.path.join(sourcepath, filestem+citelabel+input_file_extension)
+outputfile = os.path.join(outpath, filestem+citelabel+input_file_extension)
 #-------------------
 # read input file
 if args.include:
@@ -232,7 +232,7 @@ if len(args.pandoc_outputs)>0:
                     '.{}'.format(thisformat),
                     pargs=pargstring,
                     yaml=yamlfile,
-                    out_dir=pandocoutpath,
+                    out_dir=outpath,
                     x=args.xelatex,
                     ch=args.chaptermode,
                     pathtopandoc=args.pathtopandoc

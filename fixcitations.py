@@ -88,9 +88,6 @@ if 'csl' in workingyaml:
             workingyaml['csl'] = newcsl
 if 'csl' not in workingyaml:
     workingyaml['csl'] = os.path.relpath(os.path.join(config["csldir"], config["csldefault"])) # HARD OVERWRITE instead of merge
-
-print ("\n--------------------\nCSL", workingyaml['csl'], "\n--------------------\n")
-
 # BIB
 args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
 if 'bibliography' in workingyaml.keys():

@@ -36,9 +36,13 @@ jobs:
 
       - name: fix citations
         run: |
-          python citeswitcher/fixcitations.py -f manuscript.md -l
+          python citeswitcher/fixcitations.py -f manuscript.md -l 
 
-      - name: run_pandoc
+      - name: mkdir
+        run: |
+          mkdir auto-generated
+
+      - name: run_pandoc1
         uses: docker://pandoc/latex
         with:
           args: >-  # allows you to break string into multiple lines
@@ -47,7 +51,20 @@ jobs:
             --citeproc
             --pdf-engine=xelatex
             --resource-path=./
-            --output=manuscript.citemd.pdf
+            --output=auto-generated/manuscript.citemd.pdf
+            manuscript.yaml
+            manuscript.citemd.md
+
+      - name: run_pandoc1
+        uses: docker://pandoc/latex
+        with:
+          args: >-  # allows you to break string into multiple lines
+            --standalone
+            --filter pandoc-crossref
+            --citeproc
+            --pdf-engine=xelatex
+            --resource-path=./
+            --output=auto-generated/manuscript.citemd.docx
             manuscript.yaml
             manuscript.citemd.md
 
@@ -57,7 +74,9 @@ jobs:
           git config --local user.name "GitHub Action"
           git add cs.bib
           git add manuscript.yaml
-          git add manuscript.citemd.pdf
+          git add auto-generated/
+          git add auto-generated/manuscript.citemd.pdf
+          git add auto-generated/manuscript.citemd.docx
           git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf and cs.bib"
 
       - name: Push pdf

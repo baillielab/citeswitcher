@@ -34,14 +34,14 @@ For basic function of fixcitations.py:
 - pyparsing 2.4.7
 - requests-2.24.0
 - biopython
-- pyyaml
+- oyaml
 - bibtexparser is also required but it is included in this git repository (because I was concerned that it may not be well maintained)
 
 To install these:
 pip install pyparsing
 pip install requests
 pip install biopython
-pip install pyyaml
+pip install oyaml
 
 ## For pdf, docx and html outputs
 

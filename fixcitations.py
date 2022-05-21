@@ -229,6 +229,7 @@ if len(args.pandoc_outputs)>0:
             if len(args.word_template)>0:
                 pargstring+="--reference-doc {}".format(args.word_template) # e.g. a letter format
         citefunctions.callpandoc(os.path.abspath(outputfile),
+                    sourcepath,
                     '.{}'.format(thisformat),
                     pargs=pargstring,
                     yaml=yamlfile,

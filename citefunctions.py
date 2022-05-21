@@ -6,7 +6,7 @@ import os
 import re
 import sys
 import json
-import yaml
+import oyaml as yaml
 import select
 import difflib
 import calendar
@@ -202,11 +202,12 @@ def make_output(thispath, pathtopandoc="pandoc", outputformats=[], localbibonly=
         print (cmd)
         subprocess.call(cmd, shell=True)
 
-def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
+def callpandoc(f, pandocworkingpath, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pathtopandoc="pandoc"):
     # crossref must come before citeproc
     # entire yaml file is pre-pended to the main file
-    cmd = '{} --markdown-headings=atx --filter {}-crossref --citeproc {} {} {} -o {} '.format(
+    cmd = '{} --resource-path={} --markdown-headings=atx --filter {}-crossref --citeproc {} {} {} -o {} '.format(
             pathtopandoc,
+            pandocworkingpath,
             pathtopandoc,
             pargs,
             yaml,
@@ -223,7 +224,7 @@ def callpandoc(f, out_ext, out_dir='', pargs="", yaml="", x=False, ch=False, pat
     else:
         if out_ext not in ['.html']:
             cmd += " -s " # STANDALONE OUTPUT FOR EVERYTHING APART FROM MD/TXT/HTML OUT
-    with cd(os.path.split(f)[0]):
+    with cd(pandocworkingpath):
         print ("CWD:", os.getcwd())
         print (cmd)
         subprocess.call(cmd, shell=True)
@@ -268,28 +269,17 @@ def findreplace(inputtext, frdict):
     return inputtext
 
 #-------------
-def getyaml(filepath, do_includes=True):
-    if do_includes:
-        opf = "md"
-        if filepath.endswith(".tex"):
-            opf = "tex"
-        text = include.parse_includes(filepath, tbf=opf)
+def getyaml(filepath):
+    with open(filepath) as f:
+        text = f.read()
+    h,r = readheader(text)
+    if h.startswith("---"):
+        h = h[4:-3] # strip yaml identifiers
+    yml = yaml.load(h, Loader=yaml.Loader)
+    if yml:
+        return yml
     else:
-        with open(filepath) as f:
-            text = f.read()
-    filextension = os.path.split(filepath)[1].strip().split(".")[-1]
-    if filextension in ["yaml","yml"]:
-        y = readheader(text)
-    else:
-        y = readheader(text)
-    yml = {}
-    gen = yaml.safe_load_all(y[0])
-    # load_all returns a generator object. Take the first one.
-    for generator_item in gen:
-        yml = generator_item
-        break
-    print ("loaded YAML:", filepath, yml)
-    return yml
+        return {}
 
 def mergeyaml(priority_yaml, extra_yaml):
     # keep the contents of the first yaml if there is a conflict
@@ -314,7 +304,7 @@ def readheader(filecontents):
     h = ""
     remainder = filecontents
     lines = [x for x in t.split('\n')] # don't strip because indentation matters
-    if lines[0]=='---':
+    if lines[0].strip() == '---':
         h1 = re.findall( '---[\s\S]+?---',filecontents)
         h2 = re.findall( '---[\s\S]+?\.\.\.',filecontents)
         if len(h1)>0 and len(h2)>0:

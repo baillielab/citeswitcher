@@ -1,0 +1,30 @@
+---
+title: Impact of comorbid illness in acute Covid-19
+replace:
+  totcasesuk: 198
+bibliography: cs.bib
+citecolor: blue
+csl: ../../../3_scripts_and_programs/citeswitcher/sup-files/csl/nature.csl
+eqnPrefix: Equation
+figPrefix: Figure
+geometry: top=2.3cm, bottom=2.3cm, left=3.3cm, right=3.3cm
+header-includes:
+- \sloppy
+- \usepackage{hyperref}
+- \usepackage{cleveref}
+- \usepackage[left]{lineno}
+- \linenumbers
+link-citations: true
+linkcolor: blue
+numbersections: false
+reference-section-title: References
+tableTitle: Table
+figTitle: Figure
+tblPrefix: Table
+urlcolor: teal
+chapDelim: ''
+chapters: true
+chaptersDepth: 1
+toc: false
+---
+

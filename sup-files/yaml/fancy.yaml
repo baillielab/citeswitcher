@@ -3,14 +3,16 @@ numbersections: true
 link-citations: true
 reference-section-title: References
 geometry: top=2cm, bottom=1.5cm, left=1cm, right=1cm
-header-includes: |
-    \sloppy
-    \usepackage{fancyhdr}
-    \pagestyle{fancy}
-    \fancyhead[LO,LE]{}
-    \fancyhead[CO,CE]{}
-    \fancyfoot[CO,CE]{}
-    \fancyfoot[LE,RO]{\thepage}
+header-includes:
+- \sloppy
+- \usepackage{fancyhdr}
+- \pagestyle{fancy}
+- \fancyhead[LO,LE]{}
+- \fancyhead[CO,CE]{}
+- \fancyfoot[CO,CE]{}
+- \fancyfoot[LE,RO]{\thepage}
+- \usepackage{hyperref}
+- \usepackage{cleveref}
 figureTitle: Figure
 tableTitle: Table
 figPrefix: Figure

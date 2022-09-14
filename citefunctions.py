@@ -15,6 +15,7 @@ import platform
 import subprocess
 from Bio import Entrez
 from Bio import Medline
+from lxml import etree
 import xml.etree.ElementTree as ET
 import latexchars
 #-------------
@@ -236,6 +237,7 @@ def read_bib_files(bibfiles):
             # read bibtex file
             try:
                 size = os.path.getsize(bibfile)
+                #print ("reading bib file ({}) {}".format(size, bibfile))
             except:
                 print ("bib file not found at {}".format(bibfile))
                 sys.exit()
@@ -244,7 +246,8 @@ def read_bib_files(bibfiles):
                     bfs += bf.read()
             else:
                 print ("bib file empty: {}".format(bibfile))
-                return BibDatabase()
+        else:
+            print ("File does not exist: {}".format(bibfile))
     try:
         return bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True, interpolate_strings=False).parse(bfs, partial=False)
     except:
@@ -337,6 +340,9 @@ def make_unicode(inputstring):
     inputstring = nbspace.sub(" ", inputstring)
     inputstring = inputstring.replace(u"\u2003", " ") # nonbreaking space
     inputstring = inputstring.replace(u"\u0391", "$\alpha$") # alpha
+    inputstring = inputstring.replace(u"\u03B2", "$\beta$") # beta
+    inputstring = inputstring.replace(u"\u1D737", "$\beta$") # beta (maths)
+    inputstring = inputstring.replace(u"\u2009", " ") # "thin space"
     inputstring = inputstring.replace(u"\ufeff", "") # sometimes appears at start of file
     return inputstring
 
@@ -815,7 +821,8 @@ def p2b(pmidlist):
     ##print(r.text) # to examine the returned xml
     ## Loop over the PubMed IDs and parse the XML using https://docs.python.org/2/library/xml.etree.elementtree.html
     bibout = []
-    root = ET.fromstring(r.text)
+    par = etree.XMLParser(encoding='utf-8', recover=True)
+    root = ET.fromstring(r.text, parser=par)
     for PubmedArticle in root.iter('PubmedArticle'):
         PMID = PubmedArticle.find('./MedlineCitation/PMID')
         ISSN = PubmedArticle.find('./MedlineCitation/Article/Journal/ISSN')
@@ -880,7 +887,11 @@ def p2b(pmidlist):
             authorname = authors[0].split(',')[0]
         else:
             authorname = ''
-        titlewords = [x for x in ArticleTitle.text.split(' ') if len(x)>3]
+        try:
+            titlewords = [x for x in ArticleTitle.text.split(' ') if len(x)>3]
+        except:
+            print ("PUBMED ERROR - no article title for PMID:{}: {}".format(PMID.text, ArticleTitle.text))
+            continue
         if len(titlewords)>2:
             titlestring = ''.join(titlewords[:3])
         elif len(titlewords)>0:

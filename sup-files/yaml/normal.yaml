@@ -11,5 +11,7 @@ figPrefix: Figure
 eqnPrefix: Equation
 tblPrefix: Table
 header-includes: |
-    \sloppy
+- \sloppy
+- \usepackage{hyperref}
+- \usepackage{cleveref}
 ...

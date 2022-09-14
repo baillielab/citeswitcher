@@ -54,6 +54,7 @@ parser.add_argument('-ch', '--chaptermode', action="store_true", default=False, 
 parser.add_argument('-svg', '--convert_svg', action="store_true", default=False,          help='convert svg images to pdf - replaces any pdf files with the same name')
 parser.add_argument('-ui', '--uncomment_images', action="store_true", default=False,          help='include images commented out using html syntax <!--![]()\{\} -->')
 parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False,          help='force all citation references into lowercase')
+parser.add_argument('-tf', '--tableformat', default="pipe",   help='fancy_grid, github, grid, html, jira, latex, latex_booktabs, latex_raw, mediawiki, moinmoin, orgtbl, pipe, plain, presto, psql, rst, simple, textile, tsv, youtrack')
 args = parser.parse_args()
 #-------------------
 if args.filepath:
@@ -141,7 +142,7 @@ outputfile = os.path.join(outpath, filestem+citelabel+input_file_extension)
 #-------------------
 # read input file
 if args.include:
-    text = include.parse_includes(args.filepath)
+    text = include.parse_includes(args.filepath, tbf=args.tableformat)
     #text = ''.join(lines)
 else:
     with io.open(args.filepath, "r", encoding="utf-8") as f:
@@ -177,8 +178,10 @@ text = citefunctions.replace_blocks(text, args.outputstyle, use_whole=args.whole
 #-----------------
 # save bibliography
 print ('\nsaving bibliography for this file here:', localbibpath)
+outbib = bibtexparser.dumps(bib.db)
+outbib = citefunctions.make_unicode(outbib)
 with open(localbibpath, 'w') as bf:
-    bibtexparser.dump(bib.db, bf)
+    bf.write(outbib)
 #-----------------
 '''
 if len(bib.newpmids)>0:

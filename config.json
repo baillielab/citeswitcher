@@ -10,5 +10,7 @@
     "csldir": "{{scriptpath}}sup-files/csl/",
     "csldefault": "nature.csl",
     "imagedir": "img",
-    "outputsubdirname": ""
+    "outputsubdirname": "",
+    "update_bibfile":"",
+    "writing_directory":""
 }

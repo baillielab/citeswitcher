@@ -12,6 +12,8 @@ header-includes: |
     \fancyhead[CO,CE]{}
     \fancyfoot[CO,CE]{}
     \fancyfoot[LE,RO]{\thepage}
+    \usepackage{hyperref}
+    \usepackage{cleveref}
   ```{=latex}
   \usepackage{pdflscape}
   \newcommand{\blandscape}{\begin{landscape}}

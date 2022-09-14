@@ -19,4 +19,6 @@ header-includes:
   - \newtcolorbox{myquote}{colback=blue!5, colframe=lightgray!20}
   - \renewenvironment{quote}{\begin{myquote}}{\end{myquote}}
   - \pagenumbering{gobble}
+  - \usepackage{hyperref}
+  - \usepackage{cleveref}
 ---

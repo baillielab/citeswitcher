@@ -243,8 +243,7 @@ def parse_includes(thisfile, verbose=False, tbf="pipe"):
 def stripcomments(thistext):
     return re.sub(comments, "", thistext)
 
-def save_new(thisfile, outputfile="auto", stripc=False, verbose=False):
-    tableformattype = "pipe"
+def save_new(thisfile, outputfile="auto", stripc=False, verbose=False, tableformattype = "pipe"):
     if thisfile.endswith(".tex"):
         tableformattype = "tex"
     if verbose:
@@ -270,10 +269,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filename', default=None,   help='filename')
     parser.add_argument('-o', '--outputfile', default="auto",   help='outputfile')
+    parser.add_argument('-tf', '--tableformat', default="pipe",   help='fancy_grid, github, grid, html, jira, latex, latex_booktabs, latex_raw, mediawiki, moinmoin, orgtbl, pipe, plain, presto, psql, rst, simple, textile, tsv, youtrack')
     parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
     args = parser.parse_args()
-    save_new(args.filename, outputfile=args.outputfile, stripc = args.stripcomments, verbose=args.verbose)
+    save_new(args.filename, outputfile=args.outputfile, stripc = args.stripcomments, verbose=args.verbose, tableformattype=args.tableformat)
 
 
 

@@ -32,39 +32,27 @@ jobs:
           pip install biopython
           pip install pandas
           pip install tabulate
-          pip install pyyaml
+          pip install oyaml
 
       - name: mkdir
         run: |
           mkdir -p auto-generated
 
-      - name: fix citations
+      # DUPLICATE THE CODE BELOW FOR EACH FILE
+      - name: fix_citations_manuscript
         run: |
           python citeswitcher/fixcitations.py -f manuscript.md -l -d auto-generated
 
-      - name: run_pandoc1
+      - name: run_pandoc_manuscript
         uses: docker://pandoc/latex
         with:
-          args: >-  # allows you to break string into multiple lines
+          args: >-
             --standalone
             --filter pandoc-crossref
             --citeproc
             --pdf-engine=xelatex
             --resource-path=./
             --output=auto-generated/manuscript.citemd.pdf
-            manuscript.yaml
-            auto-generated/manuscript.citemd.md
-
-      - name: run_pandoc1
-        uses: docker://pandoc/latex
-        with:
-          args: >-  # allows you to break string into multiple lines
-            --standalone
-            --filter pandoc-crossref
-            --citeproc
-            --pdf-engine=xelatex
-            --resource-path=./
-            --output=auto-generated/manuscript.citemd.docx
             manuscript.yaml
             auto-generated/manuscript.citemd.md
 
@@ -76,10 +64,40 @@ jobs:
           git add manuscript.yaml
           git add auto-generated/
           git add auto-generated/manuscript.citemd.pdf
-          git add auto-generated/manuscript.citemd.docx
           git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf and cs.bib"
 
-      - name: Push pdf
+      # DUPLICATE THE CODE BELOW FOR EACH FILE
+      - name: fix_citations_supplement
+        run: |
+          python citeswitcher/fixcitations.py -f supplement.md -l -d auto-generated
+
+      - name: run_pandoc_supplement
+        uses: docker://pandoc/latex
+        with:
+          args: >-
+            --standalone
+            --filter pandoc-crossref
+            --citeproc
+            --pdf-engine=xelatex
+            --resource-path=./
+            --output=auto-generated/supplement.citemd.pdf
+            supplement.yaml
+            auto-generated/supplement.citemd.md
+
+      - name: Commit pdf if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add cs.bib
+          git add supplement.yaml
+          git add auto-generated/
+          git add auto-generated/supplement.citemd.pdf
+          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf and cs.bib"
+
+
+      # push all changes at once
+
+      - name: Push changes
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -272,9 +272,7 @@ def findreplace(inputtext, frdict):
     return inputtext
 
 #-------------
-def getyaml(filepath):
-    with open(filepath) as f:
-        text = f.read()
+def getyaml(text):
     h,r = readheader(text)
     if h.startswith("---"):
         h = h[4:-3] # strip yaml identifiers

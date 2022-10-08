@@ -8,6 +8,7 @@ import io
 import sys
 import yaml
 import json
+import copy
 import subprocess
 #-------------------
 scriptpath = os.path.dirname(os.path.realpath(__file__))
@@ -80,13 +81,17 @@ else:
 # Find bib, csl, yaml and template files
 #-------------------
 # ===> YAML according the YAML hierarchy: infile, local.yaml, other
-yamlsources = ['.'.join(x.split(".")[:-1]) for x in os.listdir(config['yamldir'])]
+if not args.yaml.endswith(".yaml"):
+    args.yaml = args.yaml+".yaml"
 yamlfile = os.path.join(sourcepath, filestem+".yaml")
-workingyaml = citefunctions.getyaml(args.filepath) # READ FROM INPUT FILE FIRST
+infileyaml = citefunctions.getyaml(text) # READ FROM INPUT FILE FIRST
+workingyaml = copy.copy(infileyaml)
 if os.path.exists(yamlfile):
-    workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(yamlfile))
-if args.yaml in yamlsources:
-    workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(os.path.join(config['yamldir'],args.yaml+".yaml")))
+    with open(yamlfile) as f:
+        workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(f.read()))
+if args.yaml in os.listdir(config['yamldir']):
+    with open(os.path.join(config['yamldir'], args.yaml)) as f:
+        workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(f.read()))
 # ===> CSL - hierarchy - yaml-specified, sup-files
 if 'csl' in workingyaml:
     if not workingyaml['csl'].endswith('.csl'):
@@ -112,8 +117,6 @@ for thistemplatetype in ["latex_template", "word_template"]:
         if not vars(args)[thistemplatetype]: # this is the same as args.latex_template or args.word_template
             vars(args)[thistemplatetype] = workingyaml[thistemplatetype]
             print ("template assigned from YAML: {}".format(workingyaml[thistemplatetype]))
-    else:
-        print (workingyaml, thistemplatetype, thistemplatetype in workingyaml)
     if vars(args)[thistemplatetype]:
         if not os.path.exists(vars(args)[thistemplatetype]): # then look in sup dir
             vars(args)[thistemplatetype] = os.path.split(vars(args)[thistemplatetype])[-1] # filename
@@ -145,8 +148,10 @@ elif args.filepath.endswith(".tex"):
         args.outputstyle = 'tex'
 #-------------------
 if args.outputstyle =="md":
+    # only output yaml settings that are not in main file
+    yamlfileyaml = {key:workingyaml[key] for key in workingyaml.keys() if key not in infileyaml}
     with open(yamlfile,"w") as o:
-        o.write('---\n{}\n---'.format(yaml.dump(workingyaml)).replace("\n\n","\n"))
+        o.write('---\n{}\n---'.format(yaml.dump(yamlfileyaml)).replace("\n\n","\n"))
 #-------------------
 # name output file
 if args.overwrite:

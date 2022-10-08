@@ -33,6 +33,7 @@ jobs:
           pip install pandas
           pip install tabulate
           pip install oyaml
+          pip install lxml
 
       - name: mkdir
         run: |

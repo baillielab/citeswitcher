@@ -42,8 +42,8 @@ parser.add_argument('-i', '--include', action="store_false", default=True,      
 parser.add_argument('-m', '--messy', action="store_true", default=False,            help='disable clean up of intermediate files')
 parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
 parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False,    help='use pandoc-mermaid-filter')
-parser.add_argument('-lt', '--latex_template', default='', help='a latex template to be passed to pandoc') # e.g. a letter format
-parser.add_argument('-wt', '--word_template', default='', help='a word template to be passed to pandoc') # e.g. a letter format
+parser.add_argument('-lt', '--latex_template', default=None, help='a latex template to be passed to pandoc') # e.g. a letter format
+parser.add_argument('-wt', '--word_template', default=None, help='a word template to be passed to pandoc') # e.g. a letter format
 parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
 parser.add_argument('-redact', '--redact', action="store_true", default=False,      help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
@@ -69,8 +69,17 @@ outpath = os.path.join(sourcepath, args.outputsubdir)
 if outpath != '':
     citefunctions.check_dir(outpath)
 filestem = '.'.join(filename.split('.')[:-1])
-# Find bib, csl and yaml files
-# YAML according the YAML hierarchy: infile, local.yaml, other
+#-------------------
+# read input file
+if args.include:
+    text = include.parse_includes(args.filepath, tbf=args.tableformat)
+    #text = ''.join(lines)
+else:
+    with io.open(args.filepath, "r", encoding="utf-8") as f:
+        text = f.read()
+# Find bib, csl, yaml and template files
+#-------------------
+# ===> YAML according the YAML hierarchy: infile, local.yaml, other
 yamlsources = ['.'.join(x.split(".")[:-1]) for x in os.listdir(config['yamldir'])]
 yamlfile = os.path.join(sourcepath, filestem+".yaml")
 workingyaml = citefunctions.getyaml(args.filepath) # READ FROM INPUT FILE FIRST
@@ -78,7 +87,7 @@ if os.path.exists(yamlfile):
     workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(yamlfile))
 if args.yaml in yamlsources:
     workingyaml = citefunctions.mergeyaml(workingyaml, citefunctions.getyaml(os.path.join(config['yamldir'],args.yaml+".yaml")))
-# CSL
+# ===> CSL - hierarchy - yaml-specified, sup-files
 if 'csl' in workingyaml:
     if not workingyaml['csl'].endswith('.csl'):
         workingyaml['csl'] = workingyaml['csl'] + '.csl'
@@ -89,14 +98,30 @@ if 'csl' in workingyaml:
             workingyaml['csl'] = newcsl
 if 'csl' not in workingyaml:
     workingyaml['csl'] = os.path.relpath(os.path.join(config["csldir"], config["csldefault"])) # HARD OVERWRITE instead of merge
-# BIB
+# ===> BIB - just read them all and copy into one local version
 args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
 if 'bibliography' in workingyaml.keys():
     print ('using yaml-specified bib: {}'.format(workingyaml['bibliography']))
 else:
     workingyaml['bibliography'] = config['default_localbib']  # HARD OVERWRITE instead of merge
 print ("Using {} as bibout".format(workingyaml['bibliography']))
-
+# ===> TEMPLATES hierarchy: command argument, yaml
+for thistemplatetype in ["latex_template", "word_template"]:
+    if thistemplatetype in workingyaml:
+        print ("template in yaml")
+        if not vars(args)[thistemplatetype]: # this is the same as args.latex_template or args.word_template
+            vars(args)[thistemplatetype] = workingyaml[thistemplatetype]
+            print ("template assigned from YAML: {}".format(workingyaml[thistemplatetype]))
+    else:
+        print (workingyaml, thistemplatetype, thistemplatetype in workingyaml)
+    if vars(args)[thistemplatetype]:
+        if not os.path.exists(vars(args)[thistemplatetype]): # then look in sup dir
+            vars(args)[thistemplatetype] = os.path.split(vars(args)[thistemplatetype])[-1] # filename
+            cdir = config["{}dir".format(thistemplatetype)]
+            if os.path.exists(cdir):
+                print ("args: ", vars(args)[thistemplatetype])
+                if vars(args)[thistemplatetype] in os.listdir(cdir):
+                    vars(args)[thistemplatetype] = os.path.join(cdir, vars(args)[thistemplatetype])
 #-------------------
 if len(args.pandoc_outputs) > 0:  # if -p is set
     if args.outputstyle not in ['null','md','markdown']: # and -o is not md
@@ -140,13 +165,6 @@ elif args.outputstyle == 'inline':
     print("outputstyle = inline")
 outputfile = os.path.join(outpath, filestem+citelabel+input_file_extension)
 #-------------------
-# read input file
-if args.include:
-    text = include.parse_includes(args.filepath, tbf=args.tableformat)
-    #text = ''.join(lines)
-else:
-    with io.open(args.filepath, "r", encoding="utf-8") as f:
-        text = f.read()
 text = citefunctions.make_unicode(text)
 if args.redact:
     text = include.redact(text)
@@ -222,14 +240,14 @@ if len(args.pandoc_outputs)>0:
     for thisformat in args.pandoc_outputs:
         pargstring = ""
         if thisformat == "pdf" or thisformat =="tex":
-            if len(args.latex_template)>0:
+            if args.latex_template:
                 pargstring+="--template {}".format(args.latex_template) # e.g. a letter format
-                args.xelatex = True
+                #args.xelatex = True # FORCE xelatex
             if args.pandoc_mermaid:
                 pargstring+="--filter pandoc-mermaid"
-                args.xelatex = True
+                #args.xelatex = True # FORCE xelatex
         elif thisformat == "docx":
-            if len(args.word_template)>0:
+            if args.word_template:
                 pargstring+="--reference-doc {}".format(args.word_template) # e.g. a letter format
         citefunctions.callpandoc(os.path.abspath(outputfile),
                     sourcepath,

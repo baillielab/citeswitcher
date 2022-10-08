@@ -1,4 +1,6 @@
 ---
+latex_template: oldstyle.tex
+word_template: xx
 numbersections: true
 link-citations: true
 reference-section-title: References

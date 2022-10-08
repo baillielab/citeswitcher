@@ -8,6 +8,8 @@
     "yamldir": "{{scriptpath}}sup-files/yaml/",
     "testfile": "{{scriptpath}}sup-files/test.md",
     "csldir": "{{scriptpath}}sup-files/csl/",
+    "latex_templatedir": "{{scriptpath}}sup-files/latex-templates/",
+    "word_templatedir": "{{scriptpath}}sup-files/word-templates/",
     "csldefault": "nature.csl",
     "imagedir": "img",
     "outputsubdirname": "",

@@ -821,109 +821,110 @@ def p2b(pmidlist):
     bibout = []
     par = etree.XMLParser(encoding='utf-8', recover=True)
     root = ET.fromstring(r.text, parser=par)
-    for PubmedArticle in root.iter('PubmedArticle'):
-        PMID = PubmedArticle.find('./MedlineCitation/PMID')
-        ISSN = PubmedArticle.find('./MedlineCitation/Article/Journal/ISSN')
-        Volume = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/Volume')
-        Issue = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/Issue')
-        Year = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/Year')
-        Month = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/Month')
-        Title = PubmedArticle.find('./MedlineCitation/Article/Journal/Title')
-        ArticleTitle = PubmedArticle.find('./MedlineCitation/Article/ArticleTitle')
-        MedlinePgn = PubmedArticle.find('./MedlineCitation/Article/Pagination/MedlinePgn')
-        Abstract = PubmedArticle.find('./MedlineCitation/Article/Abstract/AbstractText')
-        # jkb additions
-        PMCID = None
-        DOI = None
-        theseids = PubmedArticle.findall('./PubmedData/ArticleIdList/ArticleId')
-        for thisid in theseids:
-            if thisid.attrib['IdType'] == 'pmc':
-                PMCID = thisid
-            elif thisid.attrib['IdType'] == 'doi':
-                DOI = thisid
-        # format author list
-        authors = []
-        for Author in PubmedArticle.iter('Author'):
-            try:
-                LastName = Author.find('LastName').text
-                ForeName = Author.find('ForeName').text
-            except AttributeError:  # e.g. CollectiveName
-                continue
-            authors.append('{}, {}'.format(LastName, ForeName))
-        ## Use InvestigatorList instead of AuthorList
-        if len(authors) == 0:
-            ## './MedlineCitation/Article/Journal/InvestigatorList'
-            for Investigator in PubmedArticle.iter('Investigator'):
+    if root:
+        for PubmedArticle in root.iter('PubmedArticle'):
+            PMID = PubmedArticle.find('./MedlineCitation/PMID')
+            ISSN = PubmedArticle.find('./MedlineCitation/Article/Journal/ISSN')
+            Volume = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/Volume')
+            Issue = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/Issue')
+            Year = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/Year')
+            Month = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/Month')
+            Title = PubmedArticle.find('./MedlineCitation/Article/Journal/Title')
+            ArticleTitle = PubmedArticle.find('./MedlineCitation/Article/ArticleTitle')
+            MedlinePgn = PubmedArticle.find('./MedlineCitation/Article/Pagination/MedlinePgn')
+            Abstract = PubmedArticle.find('./MedlineCitation/Article/Abstract/AbstractText')
+            # jkb additions
+            PMCID = None
+            DOI = None
+            theseids = PubmedArticle.findall('./PubmedData/ArticleIdList/ArticleId')
+            for thisid in theseids:
+                if thisid.attrib['IdType'] == 'pmc':
+                    PMCID = thisid
+                elif thisid.attrib['IdType'] == 'doi':
+                    DOI = thisid
+            # format author list
+            authors = []
+            for Author in PubmedArticle.iter('Author'):
                 try:
-                    LastName = Investigator.find('LastName').text
-                    ForeName = Investigator.find('ForeName').text
+                    LastName = Author.find('LastName').text
+                    ForeName = Author.find('ForeName').text
                 except AttributeError:  # e.g. CollectiveName
                     continue
                 authors.append('{}, {}'.format(LastName, ForeName))
-        if Year is None:
-            _ = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/MedlineDate')
-            Year = _.text[:4]
-            Month = '{:02d}'.format(list(calendar.month_abbr).index(_.text[5:8]))
-        else:
-            Year = Year.text
-            if Month is not None:
-                Month = Month.text
-        '''
-        try:
-            for _ in (PMID.text, Volume.text, Title.text, ArticleTitle.text, MedlinePgn.text, Abstract.text, ''.join(authors)):
-                if _ is None:
-                    continue
-                assert '{' not in _, _
-                assert '}' not in _, _
-        except AttributeError:
-            pass
-        '''
+            ## Use InvestigatorList instead of AuthorList
+            if len(authors) == 0:
+                ## './MedlineCitation/Article/Journal/InvestigatorList'
+                for Investigator in PubmedArticle.iter('Investigator'):
+                    try:
+                        LastName = Investigator.find('LastName').text
+                        ForeName = Investigator.find('ForeName').text
+                    except AttributeError:  # e.g. CollectiveName
+                        continue
+                    authors.append('{}, {}'.format(LastName, ForeName))
+            if Year is None:
+                _ = PubmedArticle.find('./MedlineCitation/Article/Journal/JournalIssue/PubDate/MedlineDate')
+                Year = _.text[:4]
+                Month = '{:02d}'.format(list(calendar.month_abbr).index(_.text[5:8]))
+            else:
+                Year = Year.text
+                if Month is not None:
+                    Month = Month.text
+            '''
+            try:
+                for _ in (PMID.text, Volume.text, Title.text, ArticleTitle.text, MedlinePgn.text, Abstract.text, ''.join(authors)):
+                    if _ is None:
+                        continue
+                    assert '{' not in _, _
+                    assert '}' not in _, _
+            except AttributeError:
+                pass
+            '''
 
-        # make the bibtex formatted output.
-        bib = {}
-        if len(authors)>0:
-            authorname = authors[0].split(',')[0]
-        else:
-            authorname = ''
-        try:
-            titlewords = [x for x in ArticleTitle.text.split(' ') if len(x)>3]
-        except:
-            print ("PUBMED ERROR - no article title for PMID:{}: {}".format(PMID.text, ArticleTitle.text))
-            continue
-        if len(titlewords)>2:
-            titlestring = ''.join(titlewords[:3])
-        elif len(titlewords)>0:
-            titlestring = ''.join(titlewords)
-        else:
-            titlestring = ''
-        if len(authorname+titlestring)==0:
-            titlestring = "PMID{}_".format(PMID.text)
-        new_id = '{}{}{}'.format(authorname, titlestring, Year).lower()
-        new_id = re.sub(r'\W+', '', new_id)
-        bib["ID"] = latexchars.replace_accents(new_id)
-        bib["Author"] = ' and '.join(authors)
-        bib["Title"] = ArticleTitle.text
-        bib["Journal"] = Title.text
-        bib["Year"] = Year
-        if Volume is not None:
-            bib["Volume"] = Volume.text
-        if Issue is not None:
-            bib["Number"] = Issue.text
-        if MedlinePgn is not None:
-            bib["Pages"] = MedlinePgn.text
-        if Month is not None:
-            bib["Month"] = Month
-        # bib[""] = (' Abstract={{{}}},'.format(Abstract.text))
-        if PMCID is not None:
-            bib["pmcid"] = PMCID.text
-        if DOI is not None:
-            bib["doi"] = DOI.text
-        if ISSN is not None:
-            bib["ISSN"] = ISSN.text
-        bib["pmid"] = PMID.text
-        # always return clean latex
-        bib = {d:latex_to_unicode(bib[d]) for d in bib.keys()}
-        bibout.append(bib)
+            # make the bibtex formatted output.
+            bib = {}
+            if len(authors)>0:
+                authorname = authors[0].split(',')[0]
+            else:
+                authorname = ''
+            try:
+                titlewords = [x for x in ArticleTitle.text.split(' ') if len(x)>3]
+            except:
+                print ("PUBMED ERROR - no article title for PMID:{}: {}".format(PMID.text, ArticleTitle.text))
+                continue
+            if len(titlewords)>2:
+                titlestring = ''.join(titlewords[:3])
+            elif len(titlewords)>0:
+                titlestring = ''.join(titlewords)
+            else:
+                titlestring = ''
+            if len(authorname+titlestring)==0:
+                titlestring = "PMID{}_".format(PMID.text)
+            new_id = '{}{}{}'.format(authorname, titlestring, Year).lower()
+            new_id = re.sub(r'\W+', '', new_id)
+            bib["ID"] = latexchars.replace_accents(new_id)
+            bib["Author"] = ' and '.join(authors)
+            bib["Title"] = ArticleTitle.text
+            bib["Journal"] = Title.text
+            bib["Year"] = Year
+            if Volume is not None:
+                bib["Volume"] = Volume.text
+            if Issue is not None:
+                bib["Number"] = Issue.text
+            if MedlinePgn is not None:
+                bib["Pages"] = MedlinePgn.text
+            if Month is not None:
+                bib["Month"] = Month
+            # bib[""] = (' Abstract={{{}}},'.format(Abstract.text))
+            if PMCID is not None:
+                bib["pmcid"] = PMCID.text
+            if DOI is not None:
+                bib["doi"] = DOI.text
+            if ISSN is not None:
+                bib["ISSN"] = ISSN.text
+            bib["pmid"] = PMID.text
+            # always return clean latex
+            bib = {d:latex_to_unicode(bib[d]) for d in bib.keys()}
+            bibout.append(bib)
     return bibout
 
 #---------------

@@ -23,7 +23,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['zotero_bibfile'])
 parser.add_argument('-o', '--outbib',    help='outbib', default=config['default_bibfile'])
-parser.add_argument('-mt', '--mtime_range', type=int, help='modified time range(seconds)', default=0)
+parser.add_argument('-mt', '--mtime_range', type=int, help='modified time range(seconds)', default=1000)
 args = parser.parse_args()
 bibfile = os.path.expanduser(args.bibfile)
 outbib = os.path.expanduser(args.outbib)

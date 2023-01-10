@@ -1,14 +1,15 @@
 <!--
 TODO
 
+REMOVE svg, replace and include functions and put them in separate scripts ==> markdowntools
+YAML default to leave it as it is
 ADD stripreferences function to remove all confirmed references
 
 -->
 
-
 # Citeswitcher
 
-**A new project, [manubot](https://github.com/manubot/manubot), performs some of the functions of citeswitcher and is actively developed by professionals, in contrast to my amateur hacking on this project. Worth a look before you get too deep into citeswitcher...**
+A new project, manubot, performs some of the functions of citeswitcher and is under active development. If you're just starting out, that's probably a better choice. 
 
 For simple collaboration in academic writing. Cite papers as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them and make a common bib file for you, and call pandoc to make a fully referenced pdf, docx or html file.
 
@@ -77,7 +78,8 @@ Edit the `config.json` file to include your own paths before running. Key elemen
 
 ## fixcitations.py
 
-Switches citation formats, finds missing citations online, and calls pandoc to create a fully referenced output file.
+Switches citation formats, finds missing citations online. 
+Optionally, calls pandoc to create a fully referenced output file.
 
 The default or specified .bib file will then be searched for the relevant citations.
 Citations will be replaced with a citation in either .md or .tex format.
@@ -104,12 +106,17 @@ Optional:
 - *bib file*.
 	A bibtex file to use. If not specified, a new `cs.bib` file will be created in the same directory as your input file. You can also specify a global bib file for keeping a shared bank of references.
 - *yaml file*.
-	A yaml file called <filestem>.yaml will be automatically created in the same directory as your file. If it already exists, it will be augmented to add csl and bib files if needed.
+	A yaml file called <filestem>.yaml. If it already exists, it will be augmented to add csl and bib files if needed.
 	YAML is taken according to the following hierarchy: in-file YAML, <filestem>.yaml, other yaml files. All will be copied into the <filestem>.yaml file.
 - *csl file*.
 	You can specify a csl file using yaml.
+
+#### Extra functions
+
 - *replace.json file*.
 	A file called `replace.json` will be read as a dictionary of text strings to find:replace. If you just create this file and leave it in the same directory as the input file, it will be read. An alternative is to specify text to be replaced in a YAML dict format.
+
+- files to include.
 
 The default (in `config.json`) or specified .bib file will be searched for the relevant citations.
 Citations will be replaced with a citaion in either .md or .tex or PMID format.
@@ -136,7 +143,8 @@ If `-p` is specified, `-o` must be md. If both `-p` and `-o` are specified and `
 | -p | --pandoc_outputs | append as many pandoc formats as you want: pdf docx html txt md tex |
 | -l | --localbibonly | use only local bib file |
 | -d | --outputsubdir | outputdir - always a subdir of the working directory || -img | --imagedir | imagedirectoryname |
-| -i | --include | do NOT include files |
+| -i | --include | include files |
+| -r | --replace | follow find/replace instructions from yaml or json file
 | -m | --messy | disable clean up of intermediate files |
 | -mf | --move_figures | move all figures to the end and create captions section for submission to journal |
 | -pm | --pandoc_mermaid | use pandoc-mermaid-filter |

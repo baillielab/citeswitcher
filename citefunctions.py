@@ -63,6 +63,8 @@ markdown_labels_to_ignore = [
 #-------------
 #regexes
 squarebrackets = '\[[\s\S]+?\]' #'[^!]\[[^!][\s\S]+?\]'# '\[[\s\S]+?\]'
+wordbrackets = '\[<sup>[\s\S]+?<\/sup>\]\(#[\s\S]+?\)' 
+wordmultiplebrackets = '<sup>[\s\S]+?\)<\/sup>' 
 curlybrackets = '\{[\s\S]+?\}' #'\{[[^!]\s\S]+?\}'
 commentedsquarebrackets = '<!--\[[\s\S]+?\]-->'
 roundbrackets = '\([\s\S]+?\)'
@@ -296,7 +298,7 @@ def mergeyaml(priority_yaml, extra_yaml):
 
 def readheader(filecontents):
     '''
-        Read a valid markdown header
+        Read a valid markdown yaml header
         Input is full text of file
         Returns list of header items + full text of remainder
     '''
@@ -378,12 +380,17 @@ def remove_parentheses(thistext):
         and remove newlines
     '''
     thistext = thistext.strip()
-    for opener in ('(','[','{','\\cite{'):
+    for opener in ('(','[','{','\\cite{','<sup>'):
         if thistext.startswith(opener):
             thistext = thistext[len(opener):]
-    for closer in (')','}',']'):
+    for thisreg in [
+            r'[\s\S]+?<\/sup>\]\(#ref-',
+            r'\[[\s\S]+?\]\(#ref-',
+            ]:
+        thistext = re.sub(thisreg, "", thistext, count=1)
+    for closer in ('}',']',')</sup>',')'):
         if thistext.endswith(closer):
-            thistext = thistext[:-1]
+            thistext = thistext[:-len(closer)]
     thistext = thistext.replace('\n',' ')
     thistext = thistext.replace('\r',' ')
     return thistext
@@ -429,6 +436,22 @@ def get_latex_citation_blocks(inputtext):
         inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks, inputtext
 
+def get_word_citation_blocks(inputtext):
+    '''
+    return word-formatted citation formats, and new input text with these removed
+    '''
+    confirmed_blocks = []
+    for b in get_parenthesised(inputtext, [wordbrackets]):
+        confirmed_blocks.append(b)
+        inputtext = inputtext.replace(b, '---citationblockremoved---')
+    for b in get_parenthesised(inputtext, [wordmultiplebrackets]):
+        numrefs = len(re.findall(r'\[[\s\S]+?\]\(#[\s\S]+?\)',b))
+        mw = b[5:-6].split(",")
+        if len(mw)>1 and len(mw)==numrefs: # there must be more than one reference, and every single one must be in correct format
+            confirmed_blocks.append(b)
+            inputtext = inputtext.replace(b, '---citationblockremoved---')
+    return confirmed_blocks, inputtext
+
 def clean_searchstring(this_string):
     dirtychars = ['“','”','`','‘','’']
     for d in dirtychars:
@@ -466,8 +489,6 @@ def get_wholereference_citation_blocks(inputtext):
                     inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks, inputtext
 
-# parse citation blocks functions
-
 def parse_citation_block(thisblock):
     results = {
         'pmids':[],
@@ -478,6 +499,10 @@ def parse_citation_block(thisblock):
     for thisid in theseids:
         thisid = clean_id(thisid)
         if thisblock.startswith("\\cite"): #latex formatting
+            results['ids'].append(thisid)
+        elif thisblock.startswith("[<sup>"): #word formatting single citation
+            results['ids'].append(thisid)
+        elif thisblock.startswith("<sup>"): #word formatting multipe citations
             results['ids'].append(thisid)
         elif thisid.startswith('PMID:') and len(thisid)>5:
             results['pmids'].append(thisid.replace("PMID:","").strip())
@@ -729,8 +754,9 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext)
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
+    w, workingtext = [x for x in get_word_citation_blocks(workingtext) if x not in p+l]
     if use_whole:
-        r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext) if x not in p+l]
+        r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext) if x not in p+l+w]
     else:
         r=[]
     print ("Number blocks using pmid or doi or md:{}".format(len(p)))
@@ -738,7 +764,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     print ("Number blocks using wholeref:{}".format(len(r)))
     replacedict = {}
     # there are slightly different procedures for each reference type:
-    for b in p+l:
+    for b in p+l+w:
         citedhere = parse_citation_block(b)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib

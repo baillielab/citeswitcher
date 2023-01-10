@@ -131,17 +131,17 @@ def include_df(thisfile, filetype="xlsx", tf="pipe"):
     psql, rst, mediawiki, moinmoin, youtrack, html, latex, latex_raw, 
     latex_booktabs, textile, 
     '''
-
-    # BUDGET
     if filetype == "xlsx":
-        df = pd.read_excel(thisfile, index_col=0, dtype=str)
-    elif filetype == "csv":
-        df = pd.read_csv(thisfile, index_col=0)
-    elif filetype == "tsv":
-        df = pd.read_csv(thisfile, index_col=0, sep="\t")
+        df = pd.read_excel(thisfile, index_col=None, dtype=str)
+    elif filetype == "csv" or filetype =="tsv":
+        if filetype == "tsv":
+            df = pd.read_csv(thisfile, index_col=None, sep="\t")
+        else:
+            df = pd.read_csv(thisfile, index_col=None)
     else:
         print ("{} not read as {}".format(thisfile, filetype))
         return
+    df = clear_nan(df)
     # if any colname starts with "chr:pos" then sort by it
     chrlist = [x for x in list(df.columns) if x.startswith("chr:pos")]
     if len(chrlist)>0:
@@ -153,10 +153,34 @@ def include_df(thisfile, filetype="xlsx", tf="pipe"):
         df[temppos] = pd.to_numeric(df[temppos])
         df.sort_values(by=[tempchr,temppos], inplace=True)
         df.drop([tempchr,temppos], axis=1, inplace=True)
-    for colname in df.columns:
+    for i,colname in enumerate(df.columns):
         if colname.startswith('#'):
             df = df.drop(colname, axis=1)
-        elif "£" in colname:
+        if colname == "[rowcolors]":
+            # set colors for latex
+            for rowIndex, row in df.iterrows(): #iterate over rows
+                if row["[rowcolors]"] != "":
+                    for columnIndex, value in row.items():
+                        if df.loc[rowIndex, columnIndex] != '':
+                            df.loc[rowIndex, columnIndex] = '\color{%s}%s'%(row["[rowcolors]"], df.loc[rowIndex, columnIndex])
+            df = df.drop(colname, axis=1)
+        if colname == "[rowbckgdcolors]":
+            # set colors for latex NB need - \usepackage{colortbl}
+            for rowIndex, row in df.iterrows(): #iterate over rows
+                if row["[rowbckgdcolors]"] != "":
+                    for columnIndex, value in row.items():
+                        if df.loc[rowIndex, columnIndex] != '':
+                            df.loc[rowIndex, columnIndex] = '\cellcolor{%s}%s'%(row["[rowbckgdcolors]"], df.loc[rowIndex, columnIndex])
+            df = df.drop(colname, axis=1)
+    newcolnames = {x:x for x in df.columns}
+    alignmentinstructions = []
+    for i,colname in enumerate(df.columns):
+        if "[align:" in colname:
+            newcolnames[colname] = colname.split("[align:")[0]
+            alignmentinstructions.append(colname.split("[align:")[1].replace("]","").strip())
+        else:
+            alignmentinstructions.append("")
+        if "£" in colname:
             df[colname] = pd.to_numeric(df[colname])
             df[colname] = df[colname].map("£{0:,.2f}".format)
         else:
@@ -165,19 +189,20 @@ def include_df(thisfile, filetype="xlsx", tf="pipe"):
             except:
                 continue
             # round all numeric columns to 2sf
-            print (colname, allintegers(df[colname]))
+            #print (colname, allintegers(df[colname]))
             if allintegers(df[colname]):
                 df[colname] = df[colname].map("{0:.0f}".format)
             else:
                 df[colname] = df[colname].map("{0:.2g}".format)
+    df.rename(columns=newcolnames, inplace=True)
     # format number
     for thiscol in []:
         df[thiscol] = df[thiscol].map("{}".format)
-    df = clear_nan(df)
     # replace all spaces with newline
     #df.rename(columns={x:x.replace(" ","\n") for x in df.columns}, inplace=True)
     #print (df)
-    out = tabulate(df, tablefmt=tf, headers="keys")
+    df = clear_nan(df)
+    out = tabulate(df, tablefmt=tf, headers="keys", showindex=False, colalign=alignmentinstructions)
     if tf in ["github","simple","grid","pipe","fancygrid"]:
         # markdown output. Need to manually change latex formatting for italics
         ilist = re.findall(r"\\textit\{.+?\}", out)

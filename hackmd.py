@@ -21,15 +21,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--direct',    help='enter direct hackmd link')
 parser.add_argument('-c', '--chosendirs',    action='append', default=[], help='chosen directory names')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
+parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],       help='append as many pandoc formats as you want: pdf docx html txt md tex')
 parser.add_argument('-img', '--convertimages', action="store_true", default=False, help='automatically convert images')
 parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
 args = parser.parse_args()
-#-----------------------------
-outputformats = [
-        ".pdf",
-        ".docx",
-        ".html",
-    ]
 #-----------------------------
 archive_dir = "archive"
 #-----------------------------
@@ -73,13 +68,15 @@ else:
                 print (cmd)
                 subprocess.call(cmd, shell=True)
 
-                citefunctions.make_output(
-                        os.path.abspath(os.path.join(thispath, mdfile)),
-                        pathtopandoc=args.pathtopandoc,
-                        localbibonly=args.localbibonly,
-                        outputformats=outputformats
-                        )
-                # TODO: push latex compilation output to the same folder so that users can see it
+
+                if len(args.pandoc_outputs())>0:
+                    citefunctions.make_output(
+                            os.path.abspath(os.path.join(thispath, mdfile)),
+                            pathtopandoc=args.pathtopandoc,
+                            localbibonly=args.localbibonly,
+                            outputformats=args.pandoc_outputs
+                            )
+                    # TODO: push latex compilation output to the same folder so that users can see it
 
 
 

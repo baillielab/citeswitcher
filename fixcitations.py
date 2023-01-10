@@ -33,13 +33,17 @@ parser.add_argument('-f', '--filepath', default=None,                           
 parser.add_argument('-b', '--bibfile', default=config['default_bibfile'],           help='bibfile')
 parser.add_argument('-y', '--yaml', default='auto',                                 help='use this yaml file as a source; use "normal" or "fancy" to use templates')
 #---- other options
-parser.add_argument('-ow', '--overwrite', action="store_true", default=False,       help='overwrite input file with new markdown version')
+parser.add_argument('-w', '--wholereference', action="store_true", default=False,   help='try to match whole references.')
 parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
-parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],       help='append as many pandoc formats as you want: pdf docx html txt md tex')
+parser.add_argument('-ow', '--overwrite', action="store_true", default=False,       help='overwrite input file with new markdown version')
 parser.add_argument('-l', '--localbibonly', action="store_true", default=False,     help='use only local bib file')
+parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False,          help='force all citation references into lowercase')
 parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory')
+#---- options for the pandoc wrapper (unnecessary in the quarto era)
+parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],       help='append as many pandoc formats as you want: pdf docx html txt md tex')
 parser.add_argument('-img', '--imagedir', default=config['imagedir'],               help='imagedirectoryname')
-parser.add_argument('-i', '--include', action="store_false", default=True,          help='do NOT include files')
+parser.add_argument('-i', '--include', action="store_true", default=True,          help='include files')
+parser.add_argument('-r', '--replace', action="store_true", default=True,          help='replace using yaml or json instructions')
 parser.add_argument('-m', '--messy', action="store_true", default=False,            help='disable clean up of intermediate files')
 parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
 parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False,    help='use pandoc-mermaid-filter')
@@ -50,11 +54,9 @@ parser.add_argument('-redact', '--redact', action="store_true", default=False,  
 parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
 parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
 parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
-parser.add_argument('-w', '--wholereference', action="store_true", default=False,   help='try to match whole references.')
 parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,     help='use pandoc --top-level-division=chapter')
 parser.add_argument('-svg', '--convert_svg', action="store_true", default=False,          help='convert svg images to pdf - replaces any pdf files with the same name')
 parser.add_argument('-ui', '--uncomment_images', action="store_true", default=False,          help='include images commented out using html syntax <!--![]()\{\} -->')
-parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False,          help='force all citation references into lowercase')
 parser.add_argument('-tf', '--tableformat', default="pipe",   help='fancy_grid, github, grid, html, jira, latex, latex_booktabs, latex_raw, mediawiki, moinmoin, orgtbl, pipe, plain, presto, psql, rst, simple, textile, tsv, youtrack')
 args = parser.parse_args()
 #-------------------
@@ -80,7 +82,7 @@ else:
         text = f.read()
 # Find bib, csl, yaml and template files
 #-------------------
-# ===> YAML according the YAML hierarchy: infile, local.yaml, other
+# ===> READ YAML according the YAML hierarchy: infile, local.yaml, other
 if not args.yaml.endswith(".yaml"):
     args.yaml = args.yaml+".yaml"
 yamlfile = os.path.join(sourcepath, filestem+".yaml")
@@ -137,21 +139,13 @@ if len(args.pandoc_outputs) > 0:  # if -p is set
 # IF NO PANDOC OUTPUT IS REQUESTED, guess at output style if it isn't already set.
 if args.verbose:
     print("Filepath:", args.filepath)
-input_file_extension = "unrecognisedinputfile"
-if args.filepath.endswith(".md") or args.filepath.endswith(".txt"):
-    input_file_extension="md"
+input_file_extension = args.filepath.split('.')[-1]
+if args.filepath.endswith(".md") or args.filepath.endswith(".txt") or args.filepath.endswith(".qmd"):
     if args.outputstyle=='null':
         args.outputstyle = 'md'
 elif args.filepath.endswith(".tex"):
-    input_file_extension="tex"
     if args.outputstyle=='null':
         args.outputstyle = 'tex'
-#-------------------
-if args.outputstyle =="md":
-    # only output yaml settings that are not in main file
-    yamlfileyaml = {key:workingyaml[key] for key in workingyaml.keys() if key not in infileyaml}
-    with open(yamlfile,"w") as o:
-        o.write('---\n{}\n---'.format(yaml.dump(yamlfileyaml)).replace("\n\n","\n"))
 #-------------------
 # name output file
 if args.overwrite:
@@ -175,7 +169,7 @@ if args.redact:
     text = include.redact(text)
 if args.uncomment_images:
     text = citefunctions.uncomment_images(text)
-if len(args.pandoc_outputs)>0 or args.stripcomments:
+if args.stripcomments:
     text = include.stripcomments(text)
 if args.move_figures:
     text = citefunctions.move_figures(text)
@@ -213,13 +207,14 @@ if len(bib.newpmids)>0:
         ('&term='.join(["{}[pmid]".format(x) for x in pmids_to_add_to_inputdb])))
 '''
 #-----------------
-if "replace" in workingyaml.keys():
-    text = citefunctions.findreplace(text, workingyaml["replace"])
-replacefile = os.path.join(sourcepath, "replace.json")
-if os.path.exists(replacefile):
-    with open(replacefile) as rf:
-        replacedic = json.load(rf)
-    text = citefunctions.findreplace(text, replacedic)
+if args.replace:
+    if "replace" in workingyaml.keys():
+        text = citefunctions.findreplace(text, workingyaml["replace"])
+    replacefile = os.path.join(sourcepath, "replace.json")
+    if os.path.exists(replacefile):
+        with open(replacefile) as rf:
+            replacedic = json.load(rf)
+        text = citefunctions.findreplace(text, replacedic)
 #-----------------
 print ("Word count: {}\n".format(wordcount.wordcount(text)))
 #-----------------
@@ -235,6 +230,8 @@ if len(svgs)>0:
 #-----------------
 # save new text file
 with io.open(outputfile, 'w', encoding='utf-8') as file:
+    if args.outputstyle =="md":
+        file.write('---\n{}\n---'.format(yaml.dump(workingyaml)).replace("\n\n","\n"))
     file.write(text+"\n\n")
     print ("outputfile:", outputfile)
 #-----------------
@@ -254,11 +251,16 @@ if len(args.pandoc_outputs)>0:
         elif thisformat == "docx":
             if args.word_template:
                 pargstring+="--reference-doc {}".format(args.word_template) # e.g. a letter format
+        yamlfiles = []
+        if os.path.exists(yamlfile):
+            yamlfiles.append(yamlfile)
+        if args.yaml in os.listdir(config['yamldir']):
+            yamlfiles.append(args.yaml)
         citefunctions.callpandoc(os.path.abspath(outputfile),
                     sourcepath,
                     '.{}'.format(thisformat),
                     pargs=pargstring,
-                    yaml=yamlfile,
+                    yaml=" ".join(yamlfiles),
                     out_dir=outpath,
                     x=args.xelatex,
                     ch=args.chaptermode,

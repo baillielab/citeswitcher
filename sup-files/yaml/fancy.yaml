@@ -13,6 +13,7 @@ header-includes:
 - \fancyfoot[LE,RO]{\thepage}
 - \usepackage{hyperref}
 - \usepackage{cleveref}
+- \usepackage{csvsimple}
 figureTitle: Figure
 tableTitle: Table
 figPrefix: Figure

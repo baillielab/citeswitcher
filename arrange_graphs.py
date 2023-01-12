@@ -38,7 +38,6 @@ for d in range(totdivs):
     outtext += '<div id="fig:%s-%s">\n\n'%(figlabel,d)
     for r in range(args.rows):
         for c in range(args.columns):
-            i+=1
             if i>=len(files):
                 break
             print (i,d,r,c)
@@ -46,6 +45,7 @@ for d in range(totdivs):
             if c>0:
                 link = "\\ "+link
             outtext += link
+            i+=1
         outtext += "\n\n"
     outtext += '\n{}\n\n</div>\n\n'.format(args.caption)
 with open(args.outputfile,"w") as o:

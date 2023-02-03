@@ -180,7 +180,6 @@ def apply_timeline_defaults(thesesettings):
 		"start":args.defaultstart,
 		"width":args.defaultwidth,
 		"end":"{:%Y-%m-%d}".format(datetime.date.today()),
-		"num_ticks":14,
 		"tick_format" : "%B-%Y",
 		}
 	for key in defaultsettings:

@@ -2,8 +2,10 @@ import os
 import re
 import json
 import collections
+import oyaml as yaml
 #--------------
 import include
+from citefunctions import getyaml
 
 '''
 read a tex or md file
@@ -23,11 +25,21 @@ with open(args.filename) as f:
     text = f.read()
 text = include.parse_includes(args.filename)
 
+
 stemlabels = {
-    "fig": "Supplementary Figure",
-    "suppfig": "Supplementary Figure",
-    "tbl": "Supplementary Table"
+    "fig": ["Figure", "figPrefix"],
+    "tbl": ["Table", "tblPrefix"],
+    "eqn": ["Equation", "eqnPrefix"],
 }
+
+thisyaml = getyaml(text)
+for lab in stemlabels:
+    prefix = stemlabels[lab][1]
+    if prefix in thisyaml:
+        if type(thisyaml[prefix]) is list or type(thisyaml[prefix]) is tuple:
+            stemlabels[lab][0] = min(thisyaml[prefix], key=len) # take the shortest item in list (the singular "Figure")
+        else:
+            stemlabels[lab][0] = thisyaml[prefix] # take the string
 
 # remove all html comments
 text = re.sub(r"<!--[\s\S]+?-->", "", text)
@@ -51,24 +63,27 @@ for label in labels:
 results = collections.OrderedDict()
 for s in stems:
     if s not in stemlabels:
-        stemlabels[s] = s # use stem if no label entered above
+        stemlabels[s] = [s] # use stem if no label entered above
     # assign numbers to entities
     i=1
     for item in [(k, sortdict[k]) for k in sorted(sortdict, key=sortdict.get, reverse=False)]:
         label = item[0]
-        print (label)
         if "{%s:"%(s) in label:
-            results["@"+label[7:-1]] = "{} {}".format(stemlabels[s], i)
+            results["@"+label[7:-1]] = "{} {}".format(stemlabels[s][0], i)
             i+=1
         elif label.startswith("#") and s in label:
-            results["@"+label[1:-1]] = "{} {}".format(stemlabels[s], i)
+            results["@"+label[1:-1]] = "{} {}".format(stemlabels[s][0], i)
             i+=1
         elif label.startswith("<div") and s in label:
-            results ["@"+label[4:-1].replace("'",'"').split("id")[1].split('"')[1].strip()] = "{} {}".format(stemlabels[s], i)
+            results ["@"+label[4:-1].replace("'",'"').split("id")[1].split('"')[1].strip()] = "{} {}".format(stemlabels[s][0], i)
             i+=1
 
-for item in results:
+for i,item in enumerate(results.keys()):
     print (item, results[item])
+    for j in range(i+1, len(results.keys())):
+        other_item = list(results.keys())[j]
+        if item.startswith(other_item) or other_item.startswith(item):
+            print ("\n******\nWARNING: DUPLICATE ID STEM: {} {}\n******\n".format(item, other_item))
 
 alljson = {}
 if os.path.exists(args.outputfile):
@@ -80,6 +95,11 @@ with open(args.outputfile,"w") as o:
     json.dump(alljson,o, indent=4)
 
 
+for i,item in enumerate(alljson.keys()):
+    for j in range(i+1, len(alljson.keys())):
+        other_item = list(alljson.keys())[j]
+        if item.startswith(other_item) or other_item.startswith(item):
+            print ("\n******\nWARNING: DUPLICATE ID STEM in replace.json: {} {}\n******\n".format(item, other_item))
 
 
 

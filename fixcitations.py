@@ -6,7 +6,7 @@
 import os
 import io
 import sys
-import yaml
+import oyaml as yaml
 import json
 import copy
 import subprocess
@@ -271,8 +271,6 @@ if len(args.pandoc_outputs)>0:
         cmd = "rm {}".format(outputfile)
         print (cmd)
         subprocess.call(cmd, shell=True)
-
-
 
 
 

@@ -21,3 +21,7 @@ for x in files:
 		print ("File already exists: {}. Use '-o' argument to overwrite output pdf files".format(outfilepath))
 		continue
 	cairosvg.svg2pdf(url=filepath, write_to=outfilepath)
+
+'''
+alternative: use inkscape
+'''

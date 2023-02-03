@@ -18,6 +18,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-a', '--authorsource', default="", help='xlsx or csv')
 parser.add_argument('-n', '--numstartaffiliation', default=0, type=int, help='number to start counting from')
 parser.add_argument('-o', '--outputdir', default="autofiles", help='dir')
+parser.add_argument('-m', '--small_affiliations',    action="store_false", default=True,    help='use scriptsize for affiliations')
 parser.add_argument('-fa', '--fix_affiliations',    action="store_true", default=False,    help='manual fix of duplicate affiliations')
 parser.add_argument('-c', '--contfile', default="contributions.md", help='filename')
 parser.add_argument('-l', '--labelcol', default="labels", help='column header for labels')
@@ -195,12 +196,16 @@ for author_section in authsecs:
                     subtext += "##### {}\n\n".format(sub)
             subtext += ",\n".join(subs[sub])
             subtext += ".  \n\n"
+        if args.small_affiliations:
+            subtext += "\\scriptsize\n\n"
         for label in these_labels:
             subtext += "{} - {}  \n\n".format(labeldict[label], label)
         subtext += "  \n\n"
         for i,aff in enumerate(these_affiliations):
             subtext += "^{}^ {}  \n".format(affiliations.index(aff)+1+args.numstartaffiliation, aff)
         subtext += "\n\n"
+        if args.small_affiliations:
+            subtext += "\\normalsize\n\n"
         o.write(subtext)
         alltext += subtext
 

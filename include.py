@@ -23,6 +23,8 @@ md:
 OR use {!blah.txt!}
 OR use {!blah.xlsx!}
 
+{{< include _content.qmd >}}
+
 xlsx:
     - if £ in column name, format currency
     - drop columns beginning with #

@@ -6,19 +6,30 @@ import numpy as np
 import pandas as pd
 from collections import OrderedDict
 
-# input format
-# <name> \t <tab-separated special labels> \t <affiliation1> \t <affiliation2> ... ...
-# author_section and author_subsection determine which list this author's details will be added to. For a single list, these should all be the same. 
-# "main" has a special meaning and should be used to make sure a contributions file is generated.
+'''
+input format
+<name> \t <tab-separated special labels> \t <affiliation1> \t <affiliation2> ... ...
+author_section and author_subsection determine which list this author's details will be added to. For a single list, these should all be the same. 
+"main" has a special meaning and should be used to make sure a contributions file is generated.
 
+Essential columns:
+firstnames_or_initials
+surname
+affiliation
+labels
+author_section
 
+Other columns:
+author_subsection
+contribution
+'''
 #-----------------------------
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-a', '--authorsource',    action='append', default=[], help='xlsx or csv; use this to append as many values as you want')
 parser.add_argument('-n', '--numstartaffiliation', default=0, type=int, help='number to start counting from')
 parser.add_argument('-hi', '--headerindent', default=3, type=int, help='number of # in header')
-parser.add_argument('-o', '--outputdir', default="autofiles", help='dir')
+parser.add_argument('-o', '--outputdir', default="./", help='dir')
 parser.add_argument('-m', '--small_affiliations',    action="store_false", default=True,    help='use scriptsize for affiliations')
 parser.add_argument('-fa', '--fix_affiliations',    action="store_true", default=False,    help='manual fix of duplicate affiliations')
 parser.add_argument('-c', '--contfile', default="contributions.md", help='filename')
@@ -77,14 +88,23 @@ for i,a in enumerate(args.authorsource):
     elif a.endswith(".xlsx"):
         inputdfs.append( pd.read_excel(a, dtype=str) )
 df = pd.concat(inputdfs)
-
 df = df.replace(np.nan, '', regex=True)
 df = df.applymap(str) # make sure everything is a string.
 for i in df.columns: # strip whitespace
     if df[i].dtype == 'object':
         df[i] = df[i].map(str.strip)
+print (df)
+
+# Populate empty columns
 if "Name" not in df.columns:
     df["Name"] = df["firstnames_or_initials"]+ " " + df["surname"]
+if "author_section" not in df.columns:
+    df['author_section'] = 'main'
+if "author_subsection" not in df.columns:
+    df['author_subsection'] = 'main'
+if args.labelcol not in df.columns:
+    df[args.labelcol] = ''
+
 affiliationcols = [x for x in df.columns if x.startswith("affiliation")]
 nonaffiliationcols = [x for x in df.columns if not x.startswith("affiliation")]
 for affcol in affiliationcols:
@@ -230,46 +250,47 @@ with open(os.path.join(outputdir, alltextfilename),"w") as o:
     o.write(alltext)
 
 # Write author contributions statement
-main = df.loc[df["author_section"] == "main"]
-if len(main)>0:
-    names = main["Name"].to_list()
-    initials = {}
-    already = []
-    for name in names:
-        z = 1
-        ini = get_initials(name, z)
-        while z<4 and ini in already:
-            z+=1
+if "contribution" in df.columns:
+    main = df.loc[df["author_section"] == "main"]
+    if len(main)>0:
+        names = main["Name"].to_list()
+        initials = {}
+        already = []
+        for name in names:
+            z = 1
             ini = get_initials(name, z)
-        if ini in already:
-            print ("duplicate not resolved! {} {}".format(name, ini))
-        already.append(ini)
-        initials[name] = ini
-    cont = {}
-    for index, row in main.iterrows():
-        ini = initials[row["Name"]]
-        contributions = [x.replace(".","").strip() for x in row["contribution"].split(",")]
-        for c in contributions:
-            if len(c)==0:
-                continue
-            try:
-                cont[c]
-            except:
-                cont[c]=[]
-            cont[c].append(ini)
-    with open(os.path.join(outputdir, args.contfile),"w") as o:
-        for c in cont:
-            if len(c)>1:
-                o.write("{} and {} contributed to {}.\n".format(
-                    ', '.join(cont[c][:-1]),
-                    cont[c][-1],
-                    c
-                    ))
-            else:
-                o.write("{} contributed to {}.\n".format(
-                    cont[c][0],
-                    c
-                    ))
+            while z<4 and ini in already:
+                z+=1
+                ini = get_initials(name, z)
+            if ini in already:
+                print ("duplicate not resolved! {} {}".format(name, ini))
+            already.append(ini)
+            initials[name] = ini
+        cont = {}
+        for index, row in main.iterrows():
+            ini = initials[row["Name"]]
+            contributions = [x.replace(".","").strip() for x in row["contribution"].split(",")]
+            for c in contributions:
+                if len(c)==0:
+                    continue
+                try:
+                    cont[c]
+                except:
+                    cont[c]=[]
+                cont[c].append(ini)
+        with open(os.path.join(outputdir, args.contfile),"w") as o:
+            for c in cont:
+                if len(c)>1:
+                    o.write("{} and {} contributed to {}.\n".format(
+                        ', '.join(cont[c][:-1]),
+                        cont[c][-1],
+                        c
+                        ))
+                else:
+                    o.write("{} contributed to {}.\n".format(
+                        cont[c][0],
+                        c
+                        ))
 
 
 print (len(df["Name"].unique()), "unique people named")

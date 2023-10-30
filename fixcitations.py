@@ -123,8 +123,9 @@ for thistemplatetype in ["latex_template", "word_template"]:
         if not os.path.exists(vars(args)[thistemplatetype]): # then look in sup dir
             vars(args)[thistemplatetype] = os.path.split(vars(args)[thistemplatetype])[-1] # filename
             cdir = config["{}dir".format(thistemplatetype)]
+            print ("***searching for {}".format(cdir))
             if os.path.exists(cdir):
-                print ("args: ", vars(args)[thistemplatetype])
+                print ("cdir found. args: ", vars(args)[thistemplatetype])
                 if vars(args)[thistemplatetype] in os.listdir(cdir):
                     vars(args)[thistemplatetype] = os.path.join(cdir, vars(args)[thistemplatetype])
 #-------------------

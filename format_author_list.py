@@ -15,23 +15,26 @@ from collections import OrderedDict
 #-----------------------------
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('-a', '--authorsource', default="", help='xlsx or csv')
+parser.add_argument('-a', '--authorsource',    action='append', default=[], help='xlsx or csv; use this to append as many values as you want')
 parser.add_argument('-n', '--numstartaffiliation', default=0, type=int, help='number to start counting from')
+parser.add_argument('-hi', '--headerindent', default=3, type=int, help='number of # in header')
 parser.add_argument('-o', '--outputdir', default="autofiles", help='dir')
 parser.add_argument('-m', '--small_affiliations',    action="store_false", default=True,    help='use scriptsize for affiliations')
 parser.add_argument('-fa', '--fix_affiliations',    action="store_true", default=False,    help='manual fix of duplicate affiliations')
 parser.add_argument('-c', '--contfile', default="contributions.md", help='filename')
 parser.add_argument('-l', '--labelcol', default="labels", help='column header for labels')
 parser.add_argument('-s', '--similarity', default=0.7, type=float, help='Similarity metric for catching duplicate affiliations. 0-1, 1 being a perfect match.')
+parser.add_argument('-v', '--verbose',    action="store_true", default=False,    help='increases verbosity')
 args = parser.parse_args()
 #-----------------------------
 
-args.authorsource = os.path.abspath(os.path.expanduser(args.authorsource))
+for i, a in enumerate(args.authorsource):
+    args.authorsource[i] = os.path.abspath(os.path.expanduser(args.authorsource[i]))
 
 outputdir = args.outputdir
 if args.outputdir == "autofiles": #default
     if not os.path.exists(args.outputdir):
-        outputdir = os.path.join(os.path.split(args.authorsource)[0],"autofiles")
+        outputdir = os.path.join(os.path.split(args.authorsource[0])[0],"autofiles")
 
 symbols = [
     "&Dagger;",
@@ -66,31 +69,34 @@ def getlabels(theselabels):
     ''' split a comma separated string and collapse into a single list'''
     return list(set([x.strip() for x in theselabels.split(',') if len(x)>0]))
 
-# READ AUTHOR SOURCE FILE
-if args.authorsource.endswith(".csv"):
-    df = pd.read_csv(args.authorsource)
-elif args.authorsource.endswith(".xlsx"):
-    df = pd.read_excel(args.authorsource, dtype=str)
+# READ AUTHOR SOURCE FILES FROM INPUT LIST
+inputdfs = []
+for i,a in enumerate(args.authorsource):
+    if a.endswith(".csv"):
+        inputdfs.append( pd.read_csv(a) )
+    elif a.endswith(".xlsx"):
+        inputdfs.append( pd.read_excel(a, dtype=str) )
+df = pd.concat(inputdfs)
+
 df = df.replace(np.nan, '', regex=True)
 df = df.applymap(str) # make sure everything is a string.
 for i in df.columns: # strip whitespace
     if df[i].dtype == 'object':
         df[i] = df[i].map(str.strip)
-print (df)
 if "Name" not in df.columns:
     df["Name"] = df["firstnames_or_initials"]+ " " + df["surname"]
 affiliationcols = [x for x in df.columns if x.startswith("affiliation")]
 nonaffiliationcols = [x for x in df.columns if not x.startswith("affiliation")]
 for affcol in affiliationcols:
     df[affcol] = df[affcol].str.rstrip('.') # remove trailing '.'
+    for i,a in enumerate(args.authorsource):
+        inputdfs[i][affcol] = inputdfs[i][affcol].str.rstrip('.') # remove trailing '.'
 df[args.labelcol] = df[args.labelcol].str.strip()
 sourcelabels = [getlabels(x) for x in df[args.labelcol].dropna() if len(x)>0]
 sourcelabels = pd.Series([x.strip() for sublist in sourcelabels for x in sublist]).unique()
 if len(sourcelabels)>len(symbols):
     print ("Not enough symbols: {} needed, only {} specified".format(len(sourcelabels), len(symbols)))
 labeldict = {x:symbols[i] for i,x in enumerate(sourcelabels)}
-print (sourcelabels)
-print (labeldict)
 
 affiliations = []
 for index, row in df.iterrows():
@@ -101,14 +107,20 @@ for index, row in df.iterrows():
 
 duplicates = {}
 no_user_response_count = 0
-for i,a in enumerate(affiliations):
-    m = difflib.get_close_matches(a, affiliations, 6, args.similarity)[1:]
+for aff_i, aff in enumerate(affiliations):
+    m = difflib.get_close_matches(aff, affiliations, 6, args.similarity)[1:]
     if len(m)>0:
-        if a not in duplicates.keys():
-            print (a,duplicates.keys())
-            m = [a]+m
-            print ("\n*** Possible duplicate affiliation:\n{}".format("\n".join(["{}. {}".format(i,x) for i,x in enumerate(m)])))
+        if aff not in duplicates.keys():
+            m = [aff]+m
+            print ("\n*** Possible duplicate affiliation:\n{}".format("\n".join(["{}. {}".format(y+1,x) for y,x in enumerate(m)])))
             if args.fix_affiliations:
+                print ("Choose the number corresponding to one of these, or hit any letter to ignore.\n")
+                if args.verbose:
+                    for j, thisfile in enumerate(args.authorsource):
+                        found = inputdfs[j][inputdfs[j].isin(m).any(axis=1)]
+                        if len(found)>0:
+                            print ("{}:\n".format(os.path.split(thisfile)[1]))
+                            print (found[["surname"]+["affiliation{}".format(x+1) for x in range(4)]])
                 i,o,e = select.select([sys.stdin],[],[],20) # 10 second timeout
                 if no_user_response_count > 5: # user not interested. give up
                     continue
@@ -120,29 +132,30 @@ for i,a in enumerate(affiliations):
                     try:
                         q=int(q)
                     except:
-                        print ("Not an integer")
+                        print ("Not an integer, ignoring")
                         continue
                     try:
-                        m[q]
+                        m[q-1]
                     except:
                         print ("{} not in list".format(q))
                         continue
-                    print ("Choosing {}".format(m[q]))
-                    new = m[q]
+                    print ("Choosing {}".format(m[q-1]))
+                    new = m[q-1]
                     for x in m:
                         duplicates[x] = new
                     continue
             # if not replacing, keep everything the same
             for x in m:
-                print (x)
                 duplicates[x] = x
 
+df.replace(duplicates, inplace=True)
 if args.fix_affiliations:
-    df.replace(duplicates, inplace=True)
-    if args.authorsource.endswith(".csv"):
-        df.to_csv(args.authorsource, index=False)
-    elif args.authorsource.endswith(".xlsx"):
-        df.to_excel(args.authorsource, dtype=str)
+    for i,a in enumerate(args.authorsource):
+        inputdfs[i].replace(duplicates, inplace=True)
+        if a.endswith(".csv"):
+            inputdfs[i].to_csv(a, index=False)
+        elif a.endswith(".xlsx"):
+            inputdfs[i].to_excel(a, index=False)
 
 dn = df[["Name"]+affiliationcols]
 dn = dn.sort_values(by="Name")
@@ -151,8 +164,8 @@ dn.to_csv(os.path.join(outputdir,nonmatchingfilename))
 
 # MAKE A SINGLE LIST OF CONTRIBUTORS FOR EACH SECTION
 authsecs = [x for x in df["author_section"].dropna().unique() if len(x)>0]
-print (authsecs)
 alltext = ""
+already_affiliations = {}
 for author_section in authsecs:
     these_authors = []
     these_affiliations = []
@@ -160,7 +173,6 @@ for author_section in authsecs:
     outputfilename = ''.join(e for e in author_section if e.isalnum()).lower() + ".md"
     s = df.loc[df['author_section'] == author_section]
     subs = {x:[] for x in s["author_subsection"].dropna().unique()} #NB includes empty
-    print (subs)
     for index, row in s.iterrows():
         thisname = row["Name"]
         superscript = []
@@ -172,7 +184,11 @@ for author_section in authsecs:
         for aff in row.drop(nonaffiliationcols):
             if check_affiliation(aff):
                 this_author_aff.append(affiliations.index(aff)+1+args.numstartaffiliation)
-                these_affiliations.append(aff)
+                try:
+                    already_affiliations[aff]
+                except:
+                    these_affiliations.append(aff)
+                    already_affiliations[aff] = 1
         thisname = "{}".format(thisname)
         superscript += [str(x) for x in sorted(this_author_aff)]
         if len(superscript)>0:
@@ -186,14 +202,15 @@ for author_section in authsecs:
     these_affiliations = list(OrderedDict.fromkeys(these_affiliations))
     #these_affiliations = list(OrderedDict.fromkeys(affiliations)) # one global affiliation record
 
+    headerhashes = "".join(["#" for h in range(args.headerindent)])
     with open(os.path.join(outputdir, outputfilename),"w") as o:
         subtext = ""
         if author_section != "main":
-            subtext += "#### {}\n\n".format(author_section)
+            subtext += "{} {}\n\n".format(headerhashes, author_section)
         for sub in subs:
             if sub != "main":
                 if len(sub.strip())>0:
-                    subtext += "##### {}\n\n".format(sub)
+                    subtext += "{}# {}\n\n".format(headerhashes, sub)
             subtext += ",\n".join(subs[sub])
             subtext += ".  \n\n"
         if args.small_affiliations:

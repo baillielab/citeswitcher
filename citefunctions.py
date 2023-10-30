@@ -294,6 +294,8 @@ def mergeyaml(priority_yaml, extra_yaml):
                 priority_yaml[item]
             except:
                 priority_yaml[item] = extra_yaml[item]
+            if priority_yaml[item] is None:
+                priority_yaml[item] = extra_yaml[item]
     return priority_yaml
 
 def readheader(filecontents):
@@ -829,6 +831,7 @@ def search_pubmed(search_string, restrictfields=""):
 
 # --------------------
 
+
 def p2b(pmidlist):
     ''' by Nick Loman '''
 
@@ -927,7 +930,10 @@ def p2b(pmidlist):
                 titlestring = "PMID{}_".format(PMID.text)
             new_id = '{}{}{}'.format(authorname, titlestring, Year).lower()
             new_id = re.sub(r'\W+', '', new_id)
-            bib["ID"] = latexchars.replace_accents(new_id)
+            try:
+                bib["ID"] = latexchars.replace_accents(new_id)
+            except:
+                bib["ID"] = new_id
             bib["Author"] = ' and '.join(authors)
             bib["Title"] = ArticleTitle.text
             bib["Journal"] = Title.text
@@ -949,10 +955,12 @@ def p2b(pmidlist):
                 bib["ISSN"] = ISSN.text
             bib["pmid"] = PMID.text
             # always return clean latex
-            bib = {d:latex_to_unicode(bib[d]) for d in bib.keys()}
+            try:            
+                bib = {d:latex_to_unicode(bib[d]) for d in bib.keys()}
+            except:
+                pass
             bibout.append(bib)
     return bibout
-
 #---------------
 
 def getlink(entry):

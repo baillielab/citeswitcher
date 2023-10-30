@@ -35,13 +35,13 @@ totdivs = math.ceil(float(totrows)/args.rows)
 width = math.floor(float(100-args.padding)/args.columns)
 i=0
 for d in range(totdivs):
-    outtext += '<div id="fig:%s-%s">\n\n'%(figlabel,d)
+    outtext += '<div id="fig:%s-%s-auto">\n\n'%(figlabel,d)
     for r in range(args.rows):
         for c in range(args.columns):
             if i>=len(files):
                 break
             print (i,d,r,c)
-            link = "![](%s){#fig:%s-%s-%s width=%s%s}"%(os.path.relpath(os.path.join(args.directory, files[i])), figlabel, d, i, width, '%')
+            link = "![](%s){#fig:%s-%s-%s-auto width=%s%s}"%(os.path.relpath(os.path.join(args.directory, files[i])), figlabel, d, i, width, '%')
             if c>0:
                 link = "\\ "+link
             outtext += link

@@ -122,17 +122,6 @@ def getext(filepath):
 def newext(filepath, thisext):
     return filepath[:filepath.rfind('.')] + thisext
 
-def uncomment_images(thistext):
-    commented_image_regex = '<!--!\[.*?\]\(.*?\).*?-->'
-    ci_found = re.findall(commented_image_regex, thistext)
-    print ("found: ", len(ci_found), len(thistext))
-    for ci in ci_found:
-        try:
-            thistext = thistext.replace(ci, ci[4:-3])
-        except:
-            pass
-    return thistext
-
 def move_figures(thistext, dropfilepath=True):
     #figureformat = '!\[.*?\]\(.*?\).*?\n'
     figureformat = '!\[[\s\S]+?\]\([\s\S]+?\).*?\n'

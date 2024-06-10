@@ -7,7 +7,8 @@ read through a dir containing md files
 find doi, pmid, in yaml
 put doi, pmid in yaml if missing
 put date in yaml if missing
-get the front page of a pdf file if there is one in zotero 
+get the front page of a pdf file if there is one in zotero
+add paperpic to yaml *if missing*
 '''
 
 #-------------------
@@ -38,6 +39,7 @@ config = citefunctions.getconfig()
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--dir', default="./", help='working directory')
+parser.add_argument('-f', '--filepath', default="", help='specify an individual file (overrides dir)')
 parser.add_argument('-i', '--imagedir', default="../img/paperpics/", help='image dir')
 parser.add_argument('-v', '--verbose',    action="store_true", default=False,    help='increases verbosity')
 args = parser.parse_args()
@@ -79,7 +81,9 @@ def get_front_page(thisid, imagedir):
     pdf_page = os.path.join(imagedir,"{}.page.pdf".format(thisid))
     png_page = os.path.join(imagedir,"{}.png".format(thisid))
     filefound = False
-    if not os.path.exists(pdf):
+    if os.path.exists(pdf):
+        filefound = True
+    else:
         if "file" in bib.full_bibdat.entries_dict[thisid]:
             files = bib.full_bibdat.entries_dict[thisid]["file"].split(";")
             for f in files:
@@ -91,17 +95,19 @@ def get_front_page(thisid, imagedir):
     if not filefound:
         print ("No PDF file found for {}".format(thisid))
         return False
-    else:
-        if not os.path.exists(pdf_page):
-            inputpdf = PdfReader(open(pdf, "rb"))
-            output = PdfWriter()
-            output.add_page(inputpdf.pages[0])
-            with open(pdf_page, "wb") as outputStream:
-                output.write(outputStream)
-        if not os.path.exists(png_page):
-            cmd = 'gm convert -density 100 "{}" "{}"'.format(pdf_page, png_page)
-            subprocess.call(cmd, shell=True)
-        return True
+    print ("going", filepath)
+    if not os.path.exists(pdf_page):
+        inputpdf = PdfReader(open(pdf, "rb"))
+        output = PdfWriter()
+        output.add_page(inputpdf.pages[0])
+        with open(pdf_page, "wb") as outputStream:
+            output.write(outputStream)
+    if not os.path.exists(png_page):
+        cmd = 'convert -density 100 "{}" "{}"'.format(pdf_page, png_page)
+        #cmd = 'gm convert -density 100 "{}" "{}"'.format(pdf_page, png_page) # deprecated graphicsmagick version. brew install imagemagick
+        print (cmd)
+        subprocess.call(cmd, shell=True)
+    return True
 
 def checkdic(key, thisdict):
     '''
@@ -117,83 +123,65 @@ def checkdic(key, thisdict):
     return False
 
 #-------------------
-args.dir = os.path.abspath(args.dir)
-ignorelist = ["__README.md"]
-files = [x for x in os.listdir(args.dir) if not x.startswith(".") and not x in ignorelist]
 
-#files = ["generalisable_stratification.md"]
+if __name__ == "__main__":
+    args.dir = os.path.abspath(args.dir)
+    ignorelist = ["__README.md"]
+    if len(args.filepath)>0:
+        files = [os.path.abspath(args.filepath)]
+    else:
+        files = [os.path.join(args.dir, x) for x in os.listdir(args.dir) if not x.startswith(".") and not x in ignorelist]
+    for i,filepath in enumerate(files): 
+        if os.path.isdir(filepath):
+            continue
+        with io.open(filepath, "r", encoding="utf-8") as f:
+            text = f.read()
+        text = citefunctions.make_unicode(text)
+        h,r = citefunctions.readheader(text)
+        y = citefunctions.getyaml(h)
+        thisid = None
+        newyaml = {}
+        if "id" in y:
+            if checkdic("id", y):
+                thisid = y["id"]
+                try:
+                    thisone = bib.full_bibdat.entries_dict[thisid]
+                except:
+                    print ("FAILED to find {}\n... in this bibfile: {}".format(thisid, config["default_bibfile"]))
+        if thisid is None and "pmid" in y:
+            if checkdic("pmid", y):
+                thisone = citefunctions.findcitation(str(y["pmid"]), "pmid")
+                thisid = thisone["ID"]
+        if thisid is None and "doi" in y:
+            if checkdic("doi", y):
+                thisone = citefunctions.findcitation(str(y["doi"]), "doi")
+                thisid = thisone["ID"]
+        if thisid is not None:
+            newyaml["id"] = thisid
+            if "pmid" in thisone:
+                newyaml["pmid"] = thisone["pmid"]
+            if "doi" in thisone:
+                newyaml["doi"] = thisone["doi"]
+            if "journal" in thisone:
+                newyaml["journal"] = thisone["journal"]
+            if not checkdic("date", y):
+                newdate = get_date(thisid)
+                datestring = ('{:%Y-%m-%d}'.format(newdate))
+                newyaml["date"] = datestring
+            # make image file
+            if not checkdic("paperpic",y):
+                imagedirectory = os.path.abspath(os.path.join(args.dir, args.imagedir))
+                if not os.path.exists(imagedirectory):
+                    print ("ERROR - image directory not found here: {}".format(imagedirectory))
+                if get_front_page(thisid, imagedirectory):
+                    newyaml["paperpic"] = "{}.png".format(thisid)
 
-for i,thisfile in enumerate(files):
-    filepath = os.path.join(args.dir, thisfile)
-    if os.path.isdir(filepath):
-        continue
-    with io.open(filepath, "r", encoding="utf-8") as f:
-        text = f.read()
-    text = citefunctions.make_unicode(text)
-    h,r = citefunctions.readheader(text)
-    y = citefunctions.getyaml(h)
-    thisid = None
-    newyaml = {}
-    if "id" in y:
-        if checkdic("id", y):
-            thisid = y["id"]
-            try:
-                thisone = bib.full_bibdat.entries_dict[thisid]
-            except:
-                print ("FAILED to find {}\n... in this bibfile: {}".format(thisid, config["default_bibfile"]))
-    if thisid is None and "pmid" in y:
-        if checkdic("pmid", y):
-            thisone = citefunctions.findcitation(str(y["pmid"]), "pmid")
-            thisid = thisone["ID"]
-    if thisid is None and "doi" in y:
-        if checkdic("doi", y):
-            thisone = citefunctions.findcitation(str(y["doi"]), "doi")
-            thisid = thisone["ID"]
-    if thisid is not None:
-        newyaml["id"] = thisid
-        if "pmid" in thisone:
-            newyaml["pmid"] = thisone["pmid"]
-        if "doi" in thisone:
-            newyaml["doi"] = thisone["doi"]
-        if "journal" in thisone:
-            newyaml["journal"] = thisone["journal"]
-        if not checkdic("date", y):
-            newdate = get_date(thisid)
-            datestring = ('{:%Y-%m-%d}'.format(newdate))
-            newyaml["date"] = datestring
-        # make image file
-        if not checkdic("paperpic",y):
-            imagedirectory = os.path.abspath(os.path.join(args.dir, args.imagedir))
-            if not os.path.exists(imagedirectory):
-                print ("ERROR - image directory not found here: {}".format(imagedirectory))
-            if get_front_page(thisid, imagedirectory):
-                newyaml["paperpic"] = "{}.png".format(thisid)
-
-    if len(newyaml)>0:
-        y = citefunctions.mergeyaml(y,newyaml)
-        r = r.replace("\n\n","\n")
-        newcontents = "---\n{}---\n\n{}".format(yaml.dump(y).replace("\n\n","\n"),r)
-        with open(filepath,"w") as o:
-            o.write(newcontents)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        if len(newyaml)>0:
+            y = citefunctions.mergeyaml(y,newyaml)
+            r = r.replace("\n\n","\n")
+            newcontents = "---\n{}---\n\n{}".format(yaml.dump(y).replace("\n\n","\n"),r)
+            with open(filepath,"w") as o:
+                o.write(newcontents)
 
 
 

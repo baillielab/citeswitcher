@@ -67,6 +67,7 @@ for thisentry in bibdat.entries:
         thisentry['pmid']
         c+=1
     except:
+        # THIS SECTION RUNS IF PMID IS NOT IN BIB DB
         try:
             thisentry['doi']
             d+=1
@@ -74,7 +75,7 @@ for thisentry in bibdat.entries:
             #print ("No doi: {}".format(thisentry['ID']))
             continue
         try:
-            already[thisentry['doi']]
+            thisentry['pmid'] = already[thisentry['doi']]
         except:
             # only search if this hasn't already been done
             pub = citefunctions.search_pubmed(thisentry['doi'], "doi")

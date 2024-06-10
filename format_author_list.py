@@ -30,6 +30,7 @@ parser.add_argument('-a', '--authorsource',    action='append', default=[], help
 parser.add_argument('-n', '--numstartaffiliation', default=0, type=int, help='number to start counting from')
 parser.add_argument('-hi', '--headerindent', default=3, type=int, help='number of # in header')
 parser.add_argument('-o', '--outputdir', default="./", help='dir')
+parser.add_argument('-suff', '--suffix', default="", help='suffix eg. on behalf of ISF')
 parser.add_argument('-m', '--small_affiliations',    action="store_false", default=True,    help='use scriptsize for affiliations')
 parser.add_argument('-fa', '--fix_affiliations',    action="store_true", default=False,    help='manual fix of duplicate affiliations')
 parser.add_argument('-c', '--contfile', default="contributions.md", help='filename')

@@ -28,36 +28,36 @@ config = citefunctions.getconfig()
 import argparse
 parser = argparse.ArgumentParser()
 #---- essential arguments
-parser.add_argument('-f', '--filepath', default=None,                               help='filepath') # - *** essential ***
+parser.add_argument('filepath', default=None, required=False, help='filepath') # - *** essential ***
 #---- additional files to specify
-parser.add_argument('-b', '--bibfile', default=config['default_bibfile'],           help='bibfile')
-parser.add_argument('-y', '--yaml', default='auto',                                 help='use this yaml file as a source; use "normal" or "fancy" to use templates')
+parser.add_argument('-b', '--bibfile', default=config['default_bibfile'], help='bibfile')
+parser.add_argument('-y', '--yaml', default='auto', help='use this yaml file as a source; use "normal" or "fancy" to use templates')
 #---- other options
-parser.add_argument('-w', '--wholereference', action="store_true", default=False,   help='try to match whole references.')
+parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='try to match whole references.')
 parser.add_argument('-o', '--outputstyle', type=str, choices=['md','markdown','tex','latex','pubmed','pmid','inline'], default='null', help='output references format')
-parser.add_argument('-ow', '--overwrite', action="store_true", default=False,       help='overwrite input file with new markdown version')
-parser.add_argument('-l', '--localbibonly', action="store_true", default=False,     help='use only local bib file')
-parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False,          help='force all citation references into lowercase')
-parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'],     help='outputdir - always a subdir of the working directory')
+parser.add_argument('-ow', '--overwrite', action="store_true", default=False, help='overwrite input file with new markdown version')
+parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='use only local bib file')
+parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False, help='force all citation references into lowercase')
+parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'], help='outputdir - always a subdir of the working directory')
 #---- options for the pandoc wrapper (unnecessary in the quarto era)
-parser.add_argument('-p', '--pandoc_outputs',    action='append', default=[],       help='append as many pandoc formats as you want: pdf docx html txt md tex')
-parser.add_argument('-img', '--imagedir', default=config['imagedir'],               help='imagedirectoryname')
-parser.add_argument('-i', '--include', action="store_true", default=True,          help='include files')
-parser.add_argument('-r', '--replace', action="store_true", default=True,          help='replace using yaml or json instructions')
-parser.add_argument('-m', '--messy', action="store_true", default=False,            help='disable clean up of intermediate files')
-parser.add_argument('-mf', '--move_figures', action="store_true", default=False,    help='move all figures to the end and create captions section for submission to journal')
-parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False,    help='use pandoc-mermaid-filter')
+parser.add_argument('-p', '--pandoc_outputs', action='append', default=[], help='append as many pandoc formats as you want: pdf docx html txt md tex')
+parser.add_argument('-img', '--imagedir', default=config['imagedir'], help='imagedirectoryname')
+parser.add_argument('-i', '--include', action="store_true", default=True, help='include files')
+parser.add_argument('-r', '--replace', action="store_true", default=True, help='replace using yaml or json instructions')
+parser.add_argument('-m', '--messy', action="store_true", default=False, help='disable clean up of intermediate files')
+parser.add_argument('-csl', '--autocsl', action="store_true", default=False, help='automatically create csl yaml heading')
+parser.add_argument('-mf', '--move_figures', action="store_true", default=False, help='move all figures to the end and create captions section for submission to journal')
+parser.add_argument('-pm', '--pandoc_mermaid', action="store_true", default=False, help='use pandoc-mermaid-filter')
 parser.add_argument('-lt', '--latex_template', default=None, help='a latex template to be passed to pandoc') # e.g. a letter format
 parser.add_argument('-wt', '--word_template', default=None, help='a word template to be passed to pandoc') # e.g. a letter format
 parser.add_argument('-ptp', '--pathtopandoc', default='pandoc', help='specify a particular path to pandoc if desired')
-parser.add_argument('-redact', '--redact', action="store_true", default=False,      help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
-parser.add_argument('-s', '--stripcomments', action="store_true", default=False,    help='stripcomments in html format')
-parser.add_argument('-v', '--verbose', action="store_true", default=False,          help='verbose')
-parser.add_argument('-x', '--xelatex', action="store_true", default=False,          help='use xelatex in pandoc build')
-parser.add_argument('-ch', '--chaptermode', action="store_true", default=False,     help='use pandoc --top-level-division=chapter')
-parser.add_argument('-svg', '--convert_svg', action="store_true", default=False,          help='convert svg images to pdf - replaces any pdf files with the same name')
-parser.add_argument('-ui', '--uncomment_images', action="store_true", default=False,          help='include images commented out using html syntax <!--![]()\{\} -->')
-parser.add_argument('-tf', '--tableformat', default="pipe",   help='fancy_grid, github, grid, html, jira, latex, latex_booktabs, latex_raw, mediawiki, moinmoin, orgtbl, pipe, plain, presto, psql, rst, simple, textile, tsv, youtrack')
+parser.add_argument('-redact', '--redact', action="store_true", default=False, help='redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags')
+parser.add_argument('-s', '--stripcomments', action="store_true", default=False, help='stripcomments in html format')
+parser.add_argument('-v', '--verbose', action="store_true", default=False, help='verbose')
+parser.add_argument('-x', '--xelatex', action="store_true", default=False, help='use xelatex in pandoc build')
+parser.add_argument('-ch', '--chaptermode', action="store_true", default=False, help='use pandoc --top-level-division=chapter')
+parser.add_argument('-svg', '--convert_svg', action="store_true", default=False, help='convert svg images to pdf - replaces any pdf files with the same name')
+parser.add_argument('-tf', '--tableformat', default="pipe", help='fancy_grid, github, grid, html, jira, latex, latex_booktabs, latex_raw, mediawiki, moinmoin, orgtbl, pipe, plain, presto, psql, rst, simple, textile, tsv, youtrack')
 args = parser.parse_args()
 #-------------------
 if args.filepath:
@@ -98,13 +98,16 @@ if args.yaml in os.listdir(config['yamldir']):
 if 'csl' in workingyaml:
     if not workingyaml['csl'].endswith('.csl'):
         workingyaml['csl'] = workingyaml['csl'] + '.csl'
-    if not os.path.exists(workingyaml['csl']):
+    if workingyaml['csl'].startswith("http"):
+        pass
+    elif not os.path.exists(workingyaml['csl']):
         # try to find it in the sup-files folder
         newcsl = os.path.relpath(os.path.join(config['csldir'], os.path.split(workingyaml['csl'])[-1]))
         if os.path.exists(newcsl):
             workingyaml['csl'] = newcsl
-if 'csl' not in workingyaml:
-    workingyaml['csl'] = os.path.relpath(os.path.join(config["csldir"], config["csldefault"])) # HARD OVERWRITE instead of merge
+if args.autocsl:
+    if 'csl' not in workingyaml:
+        workingyaml['csl'] = os.path.relpath(os.path.join(config["csldir"], config["csldefault"])) # HARD OVERWRITE instead of merge
 # ===> BIB - just read them all and copy into one local version
 args.bibfile = os.path.abspath(os.path.expanduser(args.bibfile))
 if 'bibliography' in workingyaml.keys():
@@ -168,8 +171,6 @@ outputfile = os.path.join(outpath, filestem+citelabel+input_file_extension)
 text = citefunctions.make_unicode(text)
 if args.redact:
     text = include.redact(text)
-if args.uncomment_images:
-    text = citefunctions.uncomment_images(text)
 if args.stripcomments:
     text = include.stripcomments(text)
 if args.move_figures:

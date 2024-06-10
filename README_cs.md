@@ -5,19 +5,19 @@ REMOVE svg, replace and include functions and put them in separate scripts ==> m
 YAML default to leave it as it is
 ADD stripreferences function to remove all confirmed references
 
+ADD functionality to detect settings in _quarto.yml
+
 -->
 
 # Citeswitcher
 
-A new project, manubot, performs some of the functions of citeswitcher and is under active development. If you're just starting out, that's probably a better choice. 
-
-For simple collaboration in academic writing. Cite papers as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them and make a common bib file for you, and call pandoc to make a fully referenced pdf, docx or html file.
+For simple collaboration in academic writing. Cite papers as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them, make a common bib file for you, and convert them all to the format of your choice.
 
 # TL;DR
 
-`python fixcitations.py -f sup-files/test.md -p pdf`
+`python fixcitations.py sup-files/test.md`
 
-You can cite papers in a plain text document like this [PMID: 24465370] or like this [DOI: 10.1371/journal.pone.0081229] or (if you share a .bib file) like this [@HallNetworkAnalysisReveals2014] or (if you really need to) like this [Hall, David P., Ian J. C. MacCormick, Alex T. Phythian-Adams, Nina M. Rzechorzek, David Hope-Jones, Sorrel Cosens, Stewart Jackson, et al. “Network Analysis Reveals Distinct Clinical Syndromes Underlying Acute Mountain Sickness.” PLoS ONE 9, no. 1 (January 22, 2014): e81229].
+You can cite papers in a plain text document like this [PMID: 24465370] or like this [https://doi.org/10.1371/journal.pone.0081229] or [DOI: 10.1371/journal.pone.0081229] or (if you share a .bib file) like this [@HallNetworkAnalysisReveals2014] or (if you really need to) like this [Hall, David P., Ian J. C. MacCormick, Alex T. Phythian-Adams, Nina M. Rzechorzek, David Hope-Jones, Sorrel Cosens, Stewart Jackson, et al. “Network Analysis Reveals Distinct Clinical Syndromes Underlying Acute Mountain Sickness.” PLoS ONE 9, no. 1 (January 22, 2014): e81229].
 
 Citeswitcher will find these and format them properly as citations in the chosen output format.
 
@@ -44,16 +44,6 @@ pip install requests
 pip install biopython
 pip install oyaml
 
-## For pdf, docx and html outputs
-
-You'll want to have pandoc properly installed with crossref so that you can automatically generate printable documents.
-
-pandoc
-pandoc-crossref
-
-This can be done with conda, or pip.
-`pip install pandoc-crossref`
-
 ## Optional additional requirements
 
 Once you have the above installed, you're good to go. Additional dependencies for extra functions are listed at the end.
@@ -64,8 +54,6 @@ Download or clone the git repository into a folder on your hard disk. Then run t
 To make it easier to use, I use the unix `alias` command in my `~/.bash_profile` to automatically map common commands, like this:
 
 `alias fix="/miniconda3/envs/thisenv/bin/python <full-path-to-git-repository>/citeswitcher/fixcitations.py"`
-
-`alias hack="/miniconda3/envs/thisenv/bin/python <full-path-to-git-repository>/citeswitcher/hackmd.py"`
 
 ## Config
 
@@ -132,6 +120,17 @@ Two outputs are specified.
 `-p` determines the PANDOC OUTPUT FORMAT and provides a quick workflow for generating fully formatted documents
 
 If `-p` is specified, `-o` must be md. If both `-p` and `-o` are specified and `-o` is not md, this indicates that the user's expectation is different from what's going to happen so the script exits. Fix this by only specifying one of these options.
+
+## For pdf, docx and html outputs using pandoc
+
+(Quarto does this for you, and is better, so I'd suggest using that instead.)
+You'll want to have pandoc properly installed with crossref so that you can automatically generate printable documents.
+
+pandoc
+pandoc-crossref
+
+This can be done with conda, or pip.
+`pip install pandoc-crossref`
 
 ## Options
 

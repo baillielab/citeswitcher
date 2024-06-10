@@ -15,7 +15,7 @@ For simple collaboration in academic writing. Cite papers in a markdown/plain te
 
 # TL;DR
 
-`python fixcitations.py sup-files/test.md`
+`python fixcitations.py test/test.md`
 
 You can cite papers in a plain text document like this [PMID: 24465370] or like this [https://doi.org/10.1371/journal.pone.0081229] or [DOI: 10.1371/journal.pone.0081229] or (if you share a .bib file) like this [@HallNetworkAnalysisReveals2014] or (if you really need to) like this [Hall, David P., Ian J. C. MacCormick, Alex T. Phythian-Adams, Nina M. Rzechorzek, David Hope-Jones, Sorrel Cosens, Stewart Jackson, et al. “Network Analysis Reveals Distinct Clinical Syndromes Underlying Acute Mountain Sickness.” PLoS ONE 9, no. 1 (January 22, 2014): e81229].
 

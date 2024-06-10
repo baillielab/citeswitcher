@@ -11,7 +11,7 @@ ADD functionality to detect settings in _quarto.yml
 
 # Citeswitcher
 
-For simple collaboration in academic writing. Cite papers as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them, make a common bib file for you, and convert them all to the format of your choice.
+For simple collaboration in academic writing. Cite papers in a markdown/plain text file as PMID, DOI, bib reference, or whole citation, and citeswitcher will find them, convert them all to the format of your choice, and make a `.bib` file for you.
 
 # TL;DR
 

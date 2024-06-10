@@ -6,7 +6,7 @@ Get the comment section from the top of each script, and insert it into the READ
 '''
 
 tag = '<!--EVERYTHING BELOW IS AUTOMATICALLY OVERWRITTEN BY make_readme.py-->'
-readme = "README.md"
+readme = "README_tools.md"
 thisdir ="./"
 pycomment = '\'\'\'[\s\S]+?\'\'\''
 

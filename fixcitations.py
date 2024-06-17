@@ -28,7 +28,7 @@ config = citefunctions.getconfig()
 import argparse
 parser = argparse.ArgumentParser()
 #---- essential arguments
-parser.add_argument('filepath', default=None, required=False, help='filepath') # - *** essential ***
+parser.add_argument('filepath', default=None, help='filepath') # - *** essential ***
 #---- additional files to specify
 parser.add_argument('-b', '--bibfile', default=config['default_bibfile'], help='bibfile')
 parser.add_argument('-y', '--yaml', default='auto', help='use this yaml file as a source; use "normal" or "fancy" to use templates')

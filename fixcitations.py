@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # encoding: utf-8
 
@@ -6,7 +6,6 @@
 import os
 import io
 import sys
-import oyaml as yaml
 import json
 import copy
 import subprocess
@@ -17,6 +16,8 @@ import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
+sys.path.append(os.path.join(scriptpath, 'dependencies/'))
+import oyaml as yaml
 #-------------------
 import bib
 bib.init()
@@ -28,7 +29,7 @@ config = citefunctions.getconfig()
 import argparse
 parser = argparse.ArgumentParser()
 #---- essential arguments
-parser.add_argument('filepath', default=None, help='filepath') # - *** essential ***
+parser.add_argument('filepath', default="../genomicc-grant/caseforsupport.qmd", help='filepath') # - *** essential ***
 #---- additional files to specify
 parser.add_argument('-b', '--bibfile', default=config['default_bibfile'], help='bibfile')
 parser.add_argument('-y', '--yaml', default='auto', help='use this yaml file as a source; use "normal" or "fancy" to use templates')

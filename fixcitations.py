@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-
 import argparse
 import calendar
 import copy
@@ -29,15 +28,105 @@ from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.latexenc import latex_to_unicode
-
-import bib
-bib.init()
+from bibtexparser.latexenc import string_to_latex
 
 # patch for yaml error in pythonista on ipad
 import collections
-if not hasattr(collections, 'Hashable'):
-    import collections.abc
-    collections.Hashable = collections.abc.Hashable
+import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    if not hasattr(collections, 'Hashable'):
+        import collections.abc
+        collections.Hashable = collections.abc.Hashable
+
+
+additionaldicts = []
+verbose = False
+
+def init():
+    global full_bibdat
+    full_bibdat = BibDatabase()
+    global db # cited
+    db = BibDatabase()
+    global pmids
+    pmids = {}
+    global dois
+    dois = {}
+    additionaldicts.append((pmids, "pmid"))
+    additionaldicts.append((dois, "doi"))
+
+def id_to_lower():
+    for entry in full_bibdat.entries:
+        entry["ID"] = entry["ID"].lower()
+
+def make_alt_dicts():
+    for entry in full_bibdat.entries:
+        for thisdict, thislabel in additionaldicts:
+            try:
+                entry[thislabel]
+            except:
+                continue
+            try:
+                thisdict[entry[thislabel]]
+                if verbose:
+                    print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
+            except:
+                pass
+            thisdict[entry[thislabel]] = entry
+
+def new(entry):
+    '''
+        add new reference to full_bibdat.entries, full_bibdat.entries_dict and all additionaldicts
+    '''
+    if entry is not None:
+        try:
+            entry['ENTRYTYPE']
+        except:
+            entry['ENTRYTYPE'] = 'article'
+        already_in = False
+        try:
+            full_bibdat.entries_dict[entry['ID']] # existing full_bibdat entry ALWAYS takes precedence
+            already_in = True
+        except:
+            entry = cleanbib(entry)
+        if already_in:
+            # add any additional fields from online by merging dictionaries
+            entry = {**full_bibdat.entries_dict[entry['ID']], **entry}
+            full_bibdat.entries_dict[entry['ID']] = entry
+        else:
+            print ("adding entry to bib:\n {}".format(entry['ID']))
+            full_bibdat.entries_dict[entry['ID']] = entry
+            full_bibdat.entries = [entry] + full_bibdat.entries
+        for thisdict, thislabel in additionaldicts:
+            try:
+                entry[thislabel]
+            except:
+                continue
+            try:
+                thisdict[entry[thislabel]]
+            except:
+                thisdict[entry[thislabel]] = entry
+
+def cite(theseids):
+    if verbose:
+        print ("cite function has been asked to find:\n",theseids)
+    fails = []
+    for thisid in theseids:
+        try:
+            db.entries_dict[thisid]
+        except:
+            try:
+                full_bibdat.entries_dict[thisid]
+            except:
+                print ("id not found in full bibtex file: ", thisid)
+                fails.append(thisid)
+                continue
+            db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
+            db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
+    return fails
+
+def cleanbib(bibtex_entry):
+    return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
 
 def getconfig(cfgfile="null"):
     if cfgfile=="null":
@@ -67,16 +156,16 @@ def getconfig(cfgfile="null"):
 markdown_labels_to_ignore = [
     '@fig:','@sec:','@tbl:','@eq:',
     '#fig:','#sec:','#tbl:','#eq:',
-    '(\d+(\.\d+)?)(pt|em)',
+    r'(\d+(\.\d+)?)(pt|em)',
     ]
 
-squarebrackets = '\[[\s\S]+?\]' #'[^!]\[[^!][\s\S]+?\]'# '\[[\s\S]+?\]'
-wordbrackets = '\[<sup>[\s\S]+?<\/sup>\]\(#[\s\S]+?\)' 
-wordmultiplebrackets = '<sup>[\s\S]+?\)<\/sup>' 
-curlybrackets = '\{[\s\S]+?\}' #'\{[[^!]\s\S]+?\}'
-commentedsquarebrackets = '<!--\[[\s\S]+?\]-->'
-roundbrackets = '\([\s\S]+?\)'
-latexbrackets = '\\\cite\{[\s\S]+?\}'
+squarebrackets = r'\[[\s\S]+?\]' #'[^!]\[[^!][\s\S]+?\]'# '\[[\s\S]+?\]'
+wordbrackets = r'\[<sup>[\s\S]+?<\/sup>\]\(#[\s\S]+?\)' 
+wordmultiplebrackets = r'<sup>[\s\S]+?\)<\/sup>' 
+curlybrackets = r'\{[\s\S]+?\}' #'\{[[^!]\s\S]+?\}'
+commentedsquarebrackets = r'<!--\[[\s\S]+?\]-->'
+roundbrackets = r'\([\s\S]+?\)'
+latexbrackets = r'\\\cite\{[\s\S]+?\}'
 pubmedsearchstrings = ["PMID:", "PubMed:"]
 mdsearchstrings = ["@"]
 doisearchstrings = [
@@ -202,8 +291,8 @@ def readheader(filecontents):
     remainder = filecontents
     lines = [x for x in t.split('\n')] # don't strip because indentation matters
     if lines[0].strip() == '---':
-        h1 = re.findall( '---[\s\S]+?---',filecontents)
-        h2 = re.findall( '---[\s\S]+?\.\.\.',filecontents)
+        h1 = re.findall(r'---[\s\S]+?---',filecontents)
+        h2 = re.findall(r'---[\s\S]+?\.\.\.',filecontents)
         if len(h1)>0 and len(h2)>0:
             #print ("both yaml header formats match! Taking the shorter one")
             if len(h1[0]) < len(h2[0]):
@@ -453,7 +542,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
     '''
         search the bibdat first
         search online in a variety of ways
-        if found, use bib.new to add it to global db
+        if found, use new to add it to global db
         return a single bibtex entry
         or None if not found or in doubt
     '''
@@ -462,23 +551,23 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
     if infotype == 'pmid':
         try:
             print ("searching for {} in bibdat".format(info))
-            return bib.pmids[info]
+            return pmids[info]
         except:
-            print ("{} not found in bib.pmids: ".format(info))
+            print ("{} not found in pmids: ".format(info))
             pass
         pub = p2b([info])
         if len(pub) > 0:
             if pub[0] != 'null' and pub[0] != None:
                 print ("PMID:{} found online".format(info))
                 print (pub[0])
-                bib.new(pub[0])
+                new(pub[0])
                 return pub[0]
         print ("PMID:{} NOT FOUND ON PUBMED".format(info))
         return None
     elif infotype == 'doi':
         msg=""
         try:
-            return bib.dois[info]
+            return dois[info]
         except:
             msg += ("DOI not in bib file: {}".format(info))
         pub = search_pubmed(info, "doi")
@@ -487,7 +576,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
             if len(pubent) > 0:
                 if pubent[0] != 'null' and pubent[0] != None:
                     print (msg + "but found in pubmed: {}".format(pubent[0]))
-                    bib.new(pubent[0])
+                    new(pubent[0])
                     return pubent[0]
         print (msg + ", nor in pubmed")
         return None
@@ -523,7 +612,7 @@ Enter y/n within 10 seconds".format(
                         q = q.strip().upper()
                         if q == "Y":
                             print ('--confirmed--')
-                            bib.new(pubent[0])
+                            new(pubent[0])
                             return pubent[0]
         return None
 
@@ -536,31 +625,31 @@ def id2pmid(theseids, notpmidlist=[]):
     for thisid in theseids:
         # try to find this id in full_bibdat
         try:
-            bib.full_bibdat.entries_dict[thisid]
+            full_bibdat.entries_dict[thisid]
         except:
-            bestmatchingkey = find_similar_keys(thisid, bib.full_bibdat.entries_dict)
+            bestmatchingkey = find_similar_keys(thisid, full_bibdat.entries_dict)
             print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
             continue
         # if it is found, try to get the pmid
-        if 'PMID' in bib.full_bibdat.entries_dict[thisid]:
-            pmidlist.append(bib.full_bibdat.entries_dict[thisid]['PMID'])
-        elif 'pmid' in bib.full_bibdat.entries_dict[thisid]:
-            pmidlist.append(bib.full_bibdat.entries_dict[thisid]['pmid'])
+        if 'PMID' in full_bibdat.entries_dict[thisid]:
+            pmidlist.append(full_bibdat.entries_dict[thisid]['PMID'])
+        elif 'pmid' in full_bibdat.entries_dict[thisid]:
+            pmidlist.append(full_bibdat.entries_dict[thisid]['pmid'])
         else:
             print ("pmid not found in bib file: {}. Searching online...".format(thisid))
             try:
-                new_entry = findcitation(bib.full_bibdat.entries_dict[thisid]['doi'], 'doi')
+                new_entry = findcitation(full_bibdat.entries_dict[thisid]['doi'], 'doi')
             except:
                 notpmidlist.append(thisid) # hack
-                new_entry = bib.full_bibdat.entries_dict[thisid]
+                new_entry = full_bibdat.entries_dict[thisid]
             if new_entry is None:
-                new_entry = findcitation(bib.full_bibdat.entries_dict[thisid]['title'], 'title')
+                new_entry = findcitation(full_bibdat.entries_dict[thisid]['title'], 'title')
                 if new_entry is None:
                     notpmidlist.append(thisid)
                     continue
             try:
                 pmidlist.append(new_entry['pmid'])
-                bib.pmids[new_entry['pmid']] = new_entry
+                pmids[new_entry['pmid']] = new_entry
             except:
                 notpmidlist.append(thisid)
     return pmidlist, notpmidlist
@@ -570,29 +659,29 @@ def pmid2id(thesepmids, others):
     missing_ids = others
     for pmid in thesepmids:
         try:
-            outids.append(bib.pmids[pmid]['ID'])
-            bib.cite([bib.pmids[pmid]['ID']])
+            outids.append(pmids[pmid]['ID'])
+            cite([pmids[pmid]['ID']])
         except:
             new_entry = findcitation(pmid, 'pmid')
             if new_entry is not None:
                 outids.append(new_entry['ID'])
-                bib.new(new_entry)
+                new(new_entry)
             else:
                 missing_ids.append(pmid)
     return outids, missing_ids
 
 def format_inline(thisid):
-    au = bib.db.entries_dict[thisid]['Author'].split(" and ")
+    au = db.entries_dict[thisid]['Author'].split(" and ")
     if len(au)>1:
         au = au[0] + " et al"
     else:
         au = au[0]
     formatted_citation = "{}. {} {};{}:{}".format(
         au,
-        bib.db.entries_dict[thisid]['Journal'].capitalize(),
-        bib.db.entries_dict[thisid]['Year'],
-        bib.db.entries_dict[thisid]['Volume'],
-        bib.db.entries_dict[thisid]['Pages'],
+        db.entries_dict[thisid]['Journal'].capitalize(),
+        db.entries_dict[thisid]['Year'],
+        db.entries_dict[thisid]['Volume'],
+        db.entries_dict[thisid]['Pages'],
         )
     return formatted_citation
 
@@ -603,10 +692,10 @@ def pmidout(pmidlist, notpmidlist):
         # add to the outputdatabase if possible but since PMID is the output format, it doesn't matter if we can't find it
         for x in pmidlist:
             try:
-                bib.pmids[x]
+                pmids[x]
             except:
                 continue
-            bib.cite([bib.pmids[x]['ID']])
+            cite([pmids[x]['ID']])
         blockstring = '[' + ', '.join(["PMID:{}".format(x) for x in pmidlist]) + ']'
         if len(notpmidlist) > 0:
             blockstring += '[*' + ', '.join(notpmidlist) + ']'
@@ -620,7 +709,7 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
     if flc:
         theseids = [x.lower() for x in theseids]
     # add to the outputdatabase
-    bib.cite(theseids)
+    cite(theseids)
     # make a blockstring
     blockstring = ''
     if outputstyle == "md":
@@ -901,14 +990,6 @@ def getlink(entry):
             url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
     return url
 
-
-
-
-
-
-
-# ----------------- Main Function -----------------
-
 def main(
     filepath,
     bibfile,
@@ -1003,25 +1084,25 @@ def main(
 
     # Prepare bibliography
     localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
-    bib.db = read_bib_files([localbibpath])
+    db = read_bib_files([localbibpath])
     if localbibonly:
         print("\n*** Reading local bib file only: {} ***\n".format(localbibpath))
-        bib.full_bibdat = bib.db
+        full_bibdat = db
     else:
         if verbose:
             print("Reading bibfiles:", bibfile, localbibpath)
-        bib.full_bibdat = read_bib_files([bibfile, localbibpath])
+        full_bibdat = read_bib_files([bibfile, localbibpath])
     if force_lowercase_citations:
         print("Forcing lowercase citations")
-        bib.id_to_lower()
-    bib.make_alt_dicts()
+        id_to_lower()
+    make_alt_dicts()
 
     # Replace the ids in the text with the outputstyle
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
 
     # Save bibliography
     print('\nSaving bibliography for this file here:', localbibpath)
-    outbib = bibtexparser.dumps(bib.db)
+    outbib = bibtexparser.dumps(db)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)
@@ -1034,6 +1115,9 @@ def main(
         print("Outputfile:", outputfile)
 
 if __name__ == "__main__":
+    init()
+    config = getconfig()
+
     parser = argparse.ArgumentParser()
     # Essential arguments
     parser.add_argument("-f", '--filepath', help='Path to the input file', default="../genomicc-manuscript/manuscript.tex")

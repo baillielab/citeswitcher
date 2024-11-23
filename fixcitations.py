@@ -1118,9 +1118,7 @@ def main(
     # Save new global bibliography 
     if hash_content(original_bib_content) != hash_content(new_bib_content):
         print('\nSaving global bibliography here:', bibfile)
-        bibfile_dir = os.path.dirname(bibfile)
-        if not os.path.exists(bibfile_dir):
-            os.makedirs(bibfile_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(bibfile), exist_ok=True)
         with open(bibfile, "w", encoding="utf-8") as bf:
             bf.write(new_bib_content)
         print("Global bibliography updated.")

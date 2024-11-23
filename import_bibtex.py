@@ -24,6 +24,7 @@ parser.add_argument('-b', '--bibfile',    help='bibfile', default=config['raw_bi
 parser.add_argument('-mt', '--mtime_range', type=int, help='modified time range(seconds)', default=1000)
 args = parser.parse_args()
 bibfile = os.path.expanduser(args.bibfile)
+os.makedirs(os.path.dirname(bibfile), exist_ok=True)
 #-------------------
 import time
 t = time.time() - os.path.getmtime(bibfile)

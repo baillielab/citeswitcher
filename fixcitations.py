@@ -5,14 +5,13 @@ import argparse
 import calendar
 import copy
 import difflib
+import hashlib
 import io
 import json
 import os
-import platform
 import re
 import requests
 import select
-import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -22,6 +21,7 @@ import oyaml as yaml
 import Entrez
 import Medline
 import latexchars
+
 sys.path.append(os.path.join(scriptpath, 'dependencies/python-bibtexparser-master/'))
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
@@ -39,10 +39,13 @@ with warnings.catch_warnings():
         import collections.abc
         collections.Hashable = collections.abc.Hashable
 
+#---
+default_localbibname = "cs.bib"
+default_global_bibfile = '_bibfiles/lib.pmid.bib'
+#---
+
 
 additionaldicts = []
-verbose = False
-
 def init():
     global full_bibdat
     full_bibdat = BibDatabase()
@@ -54,6 +57,7 @@ def init():
     dois = {}
     additionaldicts.append((pmids, "pmid"))
     additionaldicts.append((dois, "doi"))
+init()
 
 def id_to_lower():
     for entry in full_bibdat.entries:
@@ -68,7 +72,7 @@ def make_alt_dicts():
                 continue
             try:
                 thisdict[entry[thislabel]]
-                if verbose:
+                if args.verbose:
                     print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
             except:
                 pass
@@ -108,7 +112,7 @@ def new(entry):
                 thisdict[entry[thislabel]] = entry
 
 def cite(theseids):
-    if verbose:
+    if args.verbose:
         print ("cite function has been asked to find:\n",theseids)
     fails = []
     for thisid in theseids:
@@ -211,32 +215,49 @@ def check_dir(this_dir):
         os.mkdir(this_dir)
     fix_permissions(this_dir)
 
-def read_bib_files(bibfiles):
+def read_bib_files(localbibfile, globalbibfile=None):
     bfs = ""
+    original_contents = ""
+    bibfiles = [localbibfile]
+    if globalbibfile:
+        bibfiles.append(globalbibfile)
     for bibfile in bibfiles:
         if os.path.exists(bibfile):
-            # read bibtex file
-            try:
-                size = os.path.getsize(bibfile)
-                #print ("reading bib file ({}) {}".format(size, bibfile))
-            except:
-                print ("bib file not found at {}".format(bibfile))
-                sys.exit()
+            size = os.path.getsize(bibfile)
             if size > 0:
                 try:
-                      with open(bibfile, encoding="utf-8") as bf:
-                        bfs += bf.read()
-                except:
-                    with open(file_path, encoding="latin1") as bf:
-                        bfs += bf.read()
+                    with open(bibfile, encoding="utf-8") as bf:
+                        content = bf.read()
+                except UnicodeDecodeError:
+                    with open(bibfile, encoding="latin1") as bf:
+                        content = bf.read()
             else:
-                print ("bib file empty: {}".format(bibfile))
+                print("Bib file empty: {}".format(bibfile))
+                content = ""
         else:
-            print ("File does not exist: {}".format(bibfile))
+            print("File does not exist: {}".format(bibfile))
+            continue  # Skip to the next file
+        bfs += content
+        if globalbibfile and bibfile == globalbibfile:
+            original_contents += content
     try:
-        return bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True, interpolate_strings=False).parse(bfs, partial=False)
-    except:
-        return BibDatabase()
+        bib_database = bibtexparser.bparser.BibTexParser(
+            common_strings=True,
+            homogenize_fields=True,
+            interpolate_strings=False
+        ).parse(bfs, partial=False)
+        return bib_database, original_contents
+    except Exception as e:
+        print(f"Error parsing BibTeX files: {e}")
+        return BibDatabase(), original_contents
+
+def serialize_bib_database(bib_database):
+    writer = BibTexWriter()
+    writer.order_entries_by = None  # Keep the order of entries
+    return writer.write(bib_database)
+
+def hash_content(content):
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
 
 def sort_db(thisdb, sortby="year"):
     sorter = {}
@@ -999,12 +1020,11 @@ def main(
     overwrite,
     localbibonly,
     force_lowercase_citations,
-    outputsubdir,
     verbose
 ):
     # Determine source path and filenames
     sourcepath, filename = os.path.split(filepath)
-    outpath = os.path.join(sourcepath, outputsubdir)
+    outpath = os.path.join(sourcepath)
     if outpath != '':
         check_dir(outpath)
     filestem = '.'.join(filename.split('.')[:-1])
@@ -1013,39 +1033,18 @@ def main(
     with io.open(filepath, "r", encoding="utf-8") as f:
         text = f.read()
 
-    # Read YAML according to the hierarchy: infile, local.yaml, other
-    if not yaml_file.endswith(".yaml"):
-        yaml_file = yaml_file + ".yaml"
-    yamlfile = os.path.join(sourcepath, filestem + ".yaml")
-    infileyaml = getyaml(text)  # READ FROM INPUT FILE FIRST
+    # READ FROM INPUT FILE FIRST
+    infileyaml = getyaml(text)
     workingyaml = copy.copy(infileyaml)
+    # THEN READ FROM FILENAME.YAML
+    yamlfile = os.path.join(sourcepath, filestem + ".yaml")
     if os.path.exists(yamlfile):
         with open(yamlfile) as f:
             workingyaml = mergeyaml(workingyaml, getyaml(f.read()))
-    if yaml_file in os.listdir(config['yamldir']):
-        with open(os.path.join(config['yamldir'], yaml_file)) as f:
+    # THEN READ FROM SPECIFIED yaml_file
+    if os.path.exists(yaml_file):
+        with open(yaml_file) as f:
             workingyaml = mergeyaml(workingyaml, getyaml(f.read()))
-    # CSL - hierarchy - yaml-specified, sup-files
-    if 'csl' in workingyaml:
-        if not workingyaml['csl'].endswith('.csl'):
-            workingyaml['csl'] = workingyaml['csl'] + '.csl'
-        if workingyaml['csl'].startswith("http"):
-            pass
-        elif not os.path.exists(workingyaml['csl']):
-            # Try to find it in the sup-files folder
-            newcsl = os.path.relpath(os.path.join(config['csldir'], os.path.split(workingyaml['csl'])[-1]))
-            if os.path.exists(newcsl):
-                workingyaml['csl'] = newcsl
-    else:
-        workingyaml['csl'] = os.path.relpath(os.path.join(config["csldir"], config["csldefault"]))  # HARD OVERWRITE
-    # BIB - read them all and copy into one local version
-    bibfile = os.path.abspath(os.path.expanduser(bibfile))
-    if 'bibliography' in workingyaml.keys():
-        print('Using YAML-specified bib:', workingyaml['bibliography'])
-    else:
-        workingyaml['bibliography'] = config['default_localbib']  # HARD OVERWRITE
-    print("Using {} as bibout".format(workingyaml['bibliography']))
-
     if verbose:
         print("Filepath:", filepath)
     input_file_extension = filepath.split('.')[-1]
@@ -1055,8 +1054,6 @@ def main(
     elif filepath.endswith(".tex"):
         if outputstyle == 'null':
             outputstyle = 'tex'
-
-    # Name output file
     if overwrite:
         print("Overwriting original file")
         citelabel = "."
@@ -1082,30 +1079,53 @@ def main(
     if verbose:
         print("Read input file:", filepath)
 
+
+
+    # BIB - read them all and copy into one local version
+    bibfile = os.path.abspath(os.path.expanduser(bibfile))
+    if 'bibliography' in workingyaml.keys():
+        print('Using YAML-specified bib:', workingyaml['bibliography'])
+    else:
+        workingyaml['bibliography'] = default_localbibname  # HARD OVERWRITE
+    print("Using {} as bibout".format(workingyaml['bibliography']))
+    
     # Prepare bibliography
     localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
-    db = read_bib_files([localbibpath])
+    db, _ = read_bib_files(localbibpath)
     if localbibonly:
         print("\n*** Reading local bib file only: {} ***\n".format(localbibpath))
-        full_bibdat = db
+        full_bibdat, _ = read_bib_files(localbibpath)
     else:
         if verbose:
             print("Reading bibfiles:", bibfile, localbibpath)
-        full_bibdat = read_bib_files([bibfile, localbibpath])
+        full_bibdat, original_bib_content = read_bib_files(localbibpath, bibfile)
+    
     if force_lowercase_citations:
         print("Forcing lowercase citations")
         id_to_lower()
     make_alt_dicts()
-
-    # Replace the ids in the text with the outputstyle
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
 
-    # Save bibliography
+    # Save bibliography for the current manuscript
     print('\nSaving bibliography for this file here:', localbibpath)
     outbib = bibtexparser.dumps(db)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)
+
+    new_bib_content = serialize_bib_database(full_bibdat)
+
+    # Save new global bibliography 
+    if hash_content(original_bib_content) != hash_content(new_bib_content):
+        print('\nSaving global bibliography here:', bibfile)
+        bibfile_dir = os.path.dirname(bibfile)
+        if not os.path.exists(bibfile_dir):
+            os.makedirs(bibfile_dir, exist_ok=True)
+        with open(bibfile, "w", encoding="utf-8") as bf:
+            bf.write(new_bib_content)
+        print("Global bibliography updated.")
+    else:
+        print("Global bibliography unchanged. Skipping write.")
 
     # Save new text file
     with io.open(outputfile, 'w', encoding='utf-8') as file:
@@ -1115,22 +1135,19 @@ def main(
         print("Outputfile:", outputfile)
 
 if __name__ == "__main__":
-    init()
     config = getconfig()
-
     parser = argparse.ArgumentParser()
     # Essential arguments
     parser.add_argument("-f", '--filepath', help='Path to the input file', default="../genomicc-manuscript/manuscript.tex")
     # Additional files to specify
-    parser.add_argument('-b', '--bibfile', default=config['default_bibfile'], help='BibTeX file')
-    parser.add_argument('-y', '--yaml', default='auto', help='YAML file to use; use "normal" or "fancy" to use templates')
+    parser.add_argument('-b', '--bibfile', default=default_global_bibfile, help='BibTeX file')
+    parser.add_argument('-y', '--yaml', default='_quarto.yml', help='YAML file to use')
     # Other options
     parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='Try to match whole references.')
-    parser.add_argument('-o', '--outputstyle', type=str, choices=['md', 'markdown', 'tex', 'latex', 'pubmed', 'pmid', 'inline'], default='null', help='Output references format')
+    parser.add_argument('-o', '--outputstyle', type=str, choices=['md', '.qmd', 'markdown', 'tex', 'latex', 'pubmed', 'pmid', 'inline'], default='null', help='Output references format')
     parser.add_argument('-ow', '--overwrite', action="store_true", default=False, help='Overwrite input file with new version')
     parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='Use only local BibTeX file')
     parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False, help='Force all citation references into lowercase')
-    parser.add_argument('-d', '--outputsubdir', default=config['outputsubdirname'], help='Output directory (subdirectory of the working directory)')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='Verbose output')
     args = parser.parse_args()
 
@@ -1144,6 +1161,5 @@ if __name__ == "__main__":
         overwrite=args.overwrite,
         localbibonly=args.localbibonly,
         force_lowercase_citations=args.force_lowercase_citations,
-        outputsubdir=args.outputsubdir,
         verbose=args.verbose
     )

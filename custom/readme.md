@@ -1,1 +1,0 @@
-This directory is for bib and csl files

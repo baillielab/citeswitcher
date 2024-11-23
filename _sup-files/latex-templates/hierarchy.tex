@@ -1,0 +1,240 @@
+%!TEX program = xelatex
+
+\documentclass{article}
+\usepackage{parskip}
+
+\makeatletter
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Configuration
+\def\sectionindent{2mm}
+\def\subsectionindent{4mm}
+\def\subsubsectionindent{6mm}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Some derived quantities
+% (you should manually update these)
+
+\def\subsectiontotalindent{6mm}
+% = \sectionindent + \subsectionindent
+
+\def\subsubsectiontotalindent{12mm}
+% = \sectionindent + \subsectionindent + \subsubsectionindent
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The following code is adapted from some sample code by 
+% Vincent Zoonekynd, made available at the following website:
+% http://zoonek.free.fr/LaTeX/LaTeX_samples_section/0.html 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Redefining \section and \section*
+
+\def\section{\@ifstar\unnumberedsection\numberedsection}
+\def\numberedsection{\@ifnextchar[%]
+  \numberedsectionwithtwoarguments\numberedsectionwithoneargument}
+\def\unnumberedsection{\@ifnextchar[%]
+  \unnumberedsectionwithtwoarguments\unnumberedsectionwithoneargument}
+\def\numberedsectionwithoneargument#1{\numberedsectionwithtwoarguments[#1]{#1}}
+\def\unnumberedsectionwithoneargument#1{\unnumberedsectionwithtwoarguments[#1]{#1}}
+\def\numberedsectionwithtwoarguments[#1]#2{%
+  \ifhmode\par\fi
+  \removelastskip
+  \vskip 3ex\goodbreak
+  \refstepcounter{section}%
+  \noindent
+  \begingroup
+  \leavevmode\Large\bfseries\raggedright
+  \rlap{\thesection}%
+  \hspace{\sectionindent}%
+  #2
+  \par
+  \endgroup
+  \vskip 2ex\nobreak
+  \addcontentsline{toc}{section}{%
+    \protect\numberline{\thesection}%
+    #1}%
+  \leftskip=\sectionindent\relax%
+  }
+\def\unnumberedsectionwithtwoarguments[#1]#2{%
+  \ifhmode\par\fi
+  \removelastskip
+  \vskip 3ex\goodbreak
+%  \refstepcounter{section}%
+  \noindent
+  \begingroup
+  \leavevmode\Large\bfseries\raggedright
+  %\rlap{\thesection}%
+  \hspace{\sectionindent}%
+  #2
+  \par
+  \endgroup
+  \vskip 2ex\nobreak
+  \addcontentsline{toc}{section}{%
+%    \protect\numberline{\thesection}%
+    #1}%
+  \leftskip=\sectionindent\relax%
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Redefining \subsection and \subsection*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\def\subsection{\@ifstar\unnumberedsubsection\numberedsubsection}
+\def\numberedsubsection{\@ifnextchar[%]
+  \numberedsubsectionwithtwoarguments\numberedsubsectionwithoneargument}
+\def\unnumberedsubsection{\@ifnextchar[%]
+  \unnumberedsubsectionwithtwoarguments\unnumberedsubsectionwithoneargument}
+\def\numberedsubsectionwithoneargument#1{\numberedsubsectionwithtwoarguments[#1]{#1}}
+\def\unnumberedsubsectionwithoneargument#1{\unnumberedsubsectionwithtwoarguments[#1]{#1}}
+\def\numberedsubsectionwithtwoarguments[#1]#2{%
+  \ifhmode\par\fi
+  \removelastskip
+  \vskip 3ex\goodbreak
+  \refstepcounter{subsection}%
+  \noindent
+  \begingroup
+  \leavevmode\large\bfseries\raggedright
+  \hspace{\sectionindent}%
+  \rlap{\thesubsection}%
+  \hspace{\subsectionindent}%
+  #2
+  \par
+  \endgroup
+  \vskip 2ex\nobreak
+  \addcontentsline{toc}{subsection}{%
+    \protect\numberline{\thesubsection}%
+    #1}%
+  \leftskip=\subsectiontotalindent\relax%
+  }
+\def\unnumberedsubsectionwithtwoarguments[#1]#2{%
+  \ifhmode\par\fi
+  \removelastskip
+  \vskip 3ex\goodbreak
+%  \refstepcounter{subsection}%
+  \noindent
+  \begingroup
+  \leavevmode\large\bfseries\raggedright
+  \hspace{\sectionindent}%
+  %\rlap{\thesubsection}%
+  \hspace{\subsectionindent}%
+  #2
+  \par
+  \endgroup
+  \vskip 2ex\nobreak
+  \addcontentsline{toc}{subsection}{%
+%    \protect\numberline{\thesubsection}%
+    #1}%
+  \leftskip=\subsectiontotalindent\relax%
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Redefining \subsubsection and \subsubsection*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\def\subsubsection{\@ifstar\unnumberedsubsubsection\numberedsubsubsection}
+\def\numberedsubsubsection{\@ifnextchar[%]
+  \numberedsubsubsectionwithtwoarguments\numberedsubsubsectionwithoneargument}
+\def\unnumberedsubsubsection{\@ifnextchar[%]
+  \unnumberedsubsubsectionwithtwoarguments\unnumberedsubsubsectionwithoneargument}
+\def\numberedsubsubsectionwithoneargument#1{\numberedsubsubsectionwithtwoarguments[#1]{#1}}
+\def\unnumberedsubsubsectionwithoneargument#1{\unnumberedsubsubsectionwithtwoarguments[#1]{#1}}
+\def\numberedsubsubsectionwithtwoarguments[#1]#2{%
+  \ifhmode\par\fi
+  \removelastskip
+  \vskip 3ex\goodbreak
+  \refstepcounter{subsubsection}%
+  \noindent
+  \begingroup
+  \leavevmode\normalsize\bfseries\raggedright
+  \hspace{\subsectiontotalindent}%
+  \rlap{\thesubsubsection}%
+  \hspace{\subsubsectionindent}%
+  #2
+  \par
+  \endgroup
+  \vskip 2ex\nobreak
+  \addcontentsline{toc}{subsubsection}{%
+    \protect\numberline{\thesubsubsection}%
+    #1}%
+  \leftskip=\subsubsectiontotalindent\relax%
+  }
+\def\unnumberedsubsubsectionwithtwoarguments[#1]#2{%
+  \ifhmode\par\fi
+  \removelastskip
+  \vskip 3ex\goodbreak
+%  \refstepcounter{subsubsection}%
+  \noindent
+  \begingroup
+  \leavevmode\normalsize\bfseries\raggedright
+  \hspace{\subsectiontotalindent}%
+  %\rlap{\thesubsubsection}%
+  \hspace{\subsubsectionindent}%
+  #2
+  \par
+  \endgroup
+  \vskip 2ex\nobreak
+  \addcontentsline{toc}{subsubsection}{%
+%    \protect\numberline{\thesubsubsection}%
+    #1}%
+  \leftskip=\subsubsectiontotalindent\relax%
+}
+
+
+\makeatother
+
+\parindent=0pt
+
+% COPIED FROM STANDALONE HEADER
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+
+\date{}
+
+
+\begin{document}
+
+
+$body$
+
+\end{document}

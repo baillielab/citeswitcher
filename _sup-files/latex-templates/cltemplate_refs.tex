@@ -1,0 +1,184 @@
+%!TEX program = xelatex
+
+\documentclass[$size$]{letter}
+\usepackage[letterpaper,margin=1in]{geometry}
+
+
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+
+$if(csl-refs)$
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newenvironment{CSLReferences}%
+  {$if(csl-hanging-indent)$\setlength{\parindent}{0pt}%
+  \everypar{\setlength{\hangindent}{\cslhangindent}}\ignorespaces$endif$}%
+  {\par}
+$endif$ 
+
+\usepackage{fixltx2e}
+
+% Allows links.
+\usepackage[usenames,dvipsnames]{color}
+\usepackage[xetex, bookmarks, colorlinks, breaklinks]{hyperref}
+\hypersetup{colorlinks=true, urlcolor=NavyBlue, linkcolor=NavyBlue}
+
+\urlstyle{rm}
+
+\frenchspacing{}        % Remove extra spaces after periods.
+\pagestyle{empty}       % Remove page numbers.
+
+\usepackage{fontspec}
+\defaultfontfeatures{Mapping=tex-text}  % Sets quotation marks.
+\setromanfont{Times}
+\setsansfont[BoldFont={Helvetica Neue Bold}]{Helvetica Neue}
+\setmonofont[Scale=MatchLowercase]{Helvetica}
+
+% From default template
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\newcommand\shyp{\-}
+
+\newcommand{\header}[9]{
+    {\hypersetup{hidelinks}
+    \noindent
+    \parbox[b][0.625in][t]{6.5in}{
+        \vspace{-0.375in}
+        \parbox[b][0.625in][t]{3.74in}
+            {\href{$head.url$}
+            {\includegraphics[height=1in]{$head.img$}}}\hfill
+        \parbox[b][0.625in][t]{3in}{
+            \vspace{1.1in}
+            \setlength{\baselineskip}{9pt}
+            \fontsize{7pt}{7pt}{
+                \fontspec{Helvetica}
+                \textbf{#8}\\
+                {#9}\\
+                #1\\
+                #2, #3 #4\\
+                Phone: #5\\
+                Email: \href{mailto:#7}{#7}
+                }
+            }
+        }}
+    }
+
+\usepackage{draftwatermark} % no-one knows why, but this is essential
+\SetWatermarkLightness{1} % hack to make watermark invisible
+
+\begin{document}
+
+\header{$head.address$}{$head.city$}{$head.state$}{$head.zip$}{$head.phone$}{$head.fax$}{$head.email$}{$sig.name$}{$head.dept$}
+
+\vspace{0.9in}
+
+$body$
+
+$if(sig.include)$
+    \begin{minipage}[t]{6.5in}
+
+    \vspace{0.1in}
+
+    $if(sig.sign)$
+        \vspace{-0.2in}\includegraphics[height=0.5in]{$sig.img$}
+    $else$
+        \\
+    $endif$
+    \\
+    $sig.name$\\
+    $sig.post$
+    $if(sig.secondpost)$
+        \\
+        $sig.secondpost$
+    $endif$
+    \end{minipage}
+$endif$
+
+$if(cc)$
+    cc: $for(cc)$$cc$$sep$, $endfor$
+$endif$
+
+$if(ps)$
+    $ps$
+$endif$
+
+\textbf{References}
+
+$if(has-frontmatter)$
+\backmatter
+$endif$
+
+$if(natbib)$
+$if(bibliography)$
+$if(biblio-title)$
+$if(has-chapters)$
+\renewcommand\bibname{$biblio-title$}
+$else$
+\renewcommand\refname{$biblio-title$}
+$endif$
+$endif$
+
+
+$if(beamer)$
+\begin{frame}[allowframebreaks]{$biblio-title$}
+  \bibliographytrue
+$endif$
+
+  \bibliography{$for(bibliography)$$bibliography$$sep$,$endfor$}
+
+$if(beamer)$
+\end{frame}
+$endif$
+
+$endif$
+$endif$
+
+$if(biblatex)$
+$if(beamer)$
+\begin{frame}[allowframebreaks]{$biblio-title$}
+  \bibliographytrue
+  \printbibliography[heading=none]
+\end{frame}
+$else$
+\printbibliography$if(biblio-title)$[title=$biblio-title$]
+$endif$
+
+$endif$
+$endif$
+
+
+
+\end{document}
+
+
+
+

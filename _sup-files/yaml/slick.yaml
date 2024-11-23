@@ -1,0 +1,22 @@
+---
+numbersections: false
+link-citations: true
+reference-section-title: References
+geometry: top=4cm, bottom=3cm, left=3cm, right=3cm
+header-includes:
+- \sloppy
+- \pagenumbering{gobble}
+- \usepackage{hyperref}
+- \usepackage{cleveref}
+figureTitle: Figure
+tableTitle: Table
+figPrefix: Figure
+eqnPrefix: Equation
+tblPrefix: Table
+urlcolor: teal
+linkcolor: blue
+citecolor: blue
+output:
+  pdf_document:
+    latex_engine: xelatex
+...

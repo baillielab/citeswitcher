@@ -1,0 +1,17 @@
+---
+numbersections: false
+link-citations: true
+toc: false
+urlcolor: blue
+linkcolor: blue
+citecolor: blue
+figureTitle: Figure
+tableTitle: Table
+figPrefix: Figure
+eqnPrefix: Equation
+tblPrefix: Table
+header-includes: |
+- \sloppy
+- \usepackage{hyperref}
+- \usepackage{cleveref}
+...

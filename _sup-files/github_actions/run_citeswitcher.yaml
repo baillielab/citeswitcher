@@ -1,0 +1,107 @@
+name: make_pdf
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  convert_via_pandoc:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: get citeswitcher
+        uses: actions/checkout@v2
+        with:
+          repository: baillielab/citeswitcher
+          ref: develop
+          path: citeswitcher
+
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install setuptools
+          pip install wheel
+          pip install pyparsing
+          pip install requests
+          pip install biopython
+          pip install pandas
+          pip install tabulate
+          pip install oyaml
+          pip install lxml
+
+      - name: mkdir
+        run: |
+          mkdir -p auto-generated
+
+      # DUPLICATE THE CODE BELOW FOR EACH FILE
+      - name: fix_citations_manuscript
+        run: |
+          python citeswitcher/fixcitations.py -f manuscript.md -l -d auto-generated
+
+      - name: run_pandoc_manuscript
+        uses: docker://pandoc/latex
+        with:
+          args: >-
+            --standalone
+            --filter pandoc-crossref
+            --citeproc
+            --pdf-engine=xelatex
+            --resource-path=./
+            --output=auto-generated/manuscript.citemd.pdf
+            manuscript.yaml
+            auto-generated/manuscript.citemd.md
+
+      - name: Commit pdf if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add cs.bib
+          git add manuscript.yaml
+          git add auto-generated/
+          git add auto-generated/manuscript.citemd.pdf
+          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf and cs.bib"
+
+      # DUPLICATE THE CODE BELOW FOR EACH FILE
+      - name: fix_citations_supplement
+        run: |
+          python citeswitcher/fixcitations.py -f supplement.md -l -d auto-generated
+
+      - name: run_pandoc_supplement
+        uses: docker://pandoc/latex
+        with:
+          args: >-
+            --standalone
+            --filter pandoc-crossref
+            --citeproc
+            --pdf-engine=xelatex
+            --resource-path=./
+            --output=auto-generated/supplement.citemd.pdf
+            supplement.yaml
+            auto-generated/supplement.citemd.md
+
+      - name: Commit pdf if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add cs.bib
+          git add supplement.yaml
+          git add auto-generated/
+          git add auto-generated/supplement.citemd.pdf
+          git diff-index --quiet HEAD || git commit -m "Automatically re-generate pdf and cs.bib"
+
+
+      # push all changes at once
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+
+

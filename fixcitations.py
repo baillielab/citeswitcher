@@ -111,7 +111,9 @@ def make_alt_dicts():
 
 def new(entry):
     '''
-        add new reference to full_bibdat.entries, full_bibdat.entries_dict and all additionaldicts
+        Add new reference to full_bibdat.entries, full_bibdat.entries_dict and all additionaldicts.
+        Merge entries by adding missing fields from the new entry.
+        If there's a conflict, the existing entry from full_bibdat takes precedence.
     '''
     if entry is not None:
         try:
@@ -120,44 +122,57 @@ def new(entry):
             entry['ENTRYTYPE'] = 'article'
         already_in = False
         try:
-            full_bibdat.entries_dict[entry['ID']] # existing full_bibdat entry ALWAYS takes precedence
-            already_in = True
-        except:
+            existing_entry = full_bibdat.entries_dict[entry['ID']]
+            # Merge entries, existing entry takes precedence
+            for key, value in entry.items():
+                if key not in existing_entry or not existing_entry[key]:
+                    existing_entry[key] = value
+            entry = existing_entry  # Update the entry reference
+        except KeyError:
             entry = cleanbib(entry)
-        if already_in:
-            # add any additional fields from online by merging dictionaries
-            entry = {**full_bibdat.entries_dict[entry['ID']], **entry}
-            full_bibdat.entries_dict[entry['ID']] = entry
-        else:
-            print ("adding entry to bib:\n {}".format(entry['ID']))
+            print("Adding new entry to bib:\n {}".format(entry['ID']))
             full_bibdat.entries_dict[entry['ID']] = entry
             full_bibdat.entries = [entry] + full_bibdat.entries
+        # Update additional dictionaries (e.g., pmids, dois)
         for thisdict, thislabel in additionaldicts:
-            try:
-                entry[thislabel]
-            except:
-                continue
-            try:
-                thisdict[entry[thislabel]]
-            except:
-                thisdict[entry[thislabel]] = entry
+            if thislabel in entry:
+                thisdict.setdefault(entry[thislabel], entry)
 
 def cite(theseids):
+    """
+    Adds the specified citation IDs to the local bibliography database (db).
+    Ensures that entries in db are identical to those in full_bibdat (global bibliography).
+    If an entry is not found in full_bibdat, it attempts to find and add it via online search.
+    """
     if args.verbose:
-        print ("cite function has been asked to find:\n",theseids)
+        print("cite function has been asked to find:\n", theseids)
     fails = []
     for thisid in theseids:
-        try:
-            db.entries_dict[thisid]
-        except:
-            try:
-                full_bibdat.entries_dict[thisid]
-            except:
-                print ("id not found in full bibtex file: ", thisid)
-                fails.append(thisid)
-                continue
-            db.entries = [full_bibdat.entries_dict[thisid]] + db.entries
+        # Ensure the citation ID is in lowercase if force_lowercase_citations is True
+        if args.force_lowercase_citations:
+            thisid = thisid.lower()
+        # Check if the entry is already in db
+        if thisid in db.entries_dict:
+            continue  # Entry is already in local bibliography
+        # Check if the entry exists in full_bibdat
+        if thisid in full_bibdat.entries_dict:
+            # Add the entry from full_bibdat to db
             db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
+            db.entries.append(full_bibdat.entries_dict[thisid])
+        else:
+            # Entry not found in full_bibdat, attempt to find it online
+            print("ID not found in global bibtex file:", thisid)
+            # Optionally attempt to find the entry online
+            new_entry = findcitation(thisid, 'id')
+            if new_entry:
+                # Add the new entry to full_bibdat and db
+                new(new_entry)
+                db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
+                db.entries.append(full_bibdat.entries_dict[thisid])
+            else:
+                # Unable to find the entry
+                print("Unable to find entry for ID:", thisid)
+                fails.append(thisid)
     return fails
 
 def cleanbib(bibtex_entry):

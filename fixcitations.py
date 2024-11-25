@@ -41,9 +41,40 @@ with warnings.catch_warnings():
 
 #---
 default_localbibname = "cs.bib"
-default_global_bibfile = '_bibfiles/lib.pmid.bib'
+default_global_bibfile = os.path.join(scriptpath,'_bibfiles/lib.pmid.bib')
 #---
 
+markdown_labels_to_ignore = [
+    '@fig:','@sec:','@tbl:','@eq:',
+    '#fig:','#sec:','#tbl:','#eq:',
+    r'(\d+(\.\d+)?)(pt|em)',
+    ]
+
+squarebrackets = r'\[[\s\S]+?\]' #'[^!]\[[^!][\s\S]+?\]'# '\[[\s\S]+?\]'
+wordbrackets = r'\[<sup>[\s\S]+?<\/sup>\]\(#[\s\S]+?\)' 
+wordmultiplebrackets = r'<sup>[\s\S]+?\)<\/sup>' 
+curlybrackets = r'\{[\s\S]+?\}' #'\{[[^!]\s\S]+?\}'
+commentedsquarebrackets = r'<!--\[[\s\S]+?\]-->'
+roundbrackets = r'\([\s\S]+?\)'
+latexbrackets = r'\\cite\{[\s\S]+?\}'
+pubmedsearchstrings = ["PMID:", "PubMed:"]
+mdsearchstrings = ["@"]
+doisearchstrings = [
+            "doi: https://doi.org/",
+            "doi: http://doi.org/",
+            "doi: http://dx.doi.org/",
+            "doi: https://dx.doi.org/",
+            "doi:https://doi.org/",
+            "doi:http://doi.org/",
+            "doi:http://dx.doi.org/",
+            "doi:https://dx.doi.org/",
+            "doi:",
+            "https://doi.org/",
+            "http://doi.org/",
+            "http://dx.doi.org/",
+            "https://dx.doi.org/",
+        ]
+no_user_response_count = 0
 
 additionaldicts = []
 def init():
@@ -156,38 +187,6 @@ def getconfig(cfgfile="null"):
         print ("No email in config file: {}".format(cfgfile))
         sys.exit()
     return data
-
-markdown_labels_to_ignore = [
-    '@fig:','@sec:','@tbl:','@eq:',
-    '#fig:','#sec:','#tbl:','#eq:',
-    r'(\d+(\.\d+)?)(pt|em)',
-    ]
-
-squarebrackets = r'\[[\s\S]+?\]' #'[^!]\[[^!][\s\S]+?\]'# '\[[\s\S]+?\]'
-wordbrackets = r'\[<sup>[\s\S]+?<\/sup>\]\(#[\s\S]+?\)' 
-wordmultiplebrackets = r'<sup>[\s\S]+?\)<\/sup>' 
-curlybrackets = r'\{[\s\S]+?\}' #'\{[[^!]\s\S]+?\}'
-commentedsquarebrackets = r'<!--\[[\s\S]+?\]-->'
-roundbrackets = r'\([\s\S]+?\)'
-latexbrackets = r'\\\cite\{[\s\S]+?\}'
-pubmedsearchstrings = ["PMID:", "PubMed:"]
-mdsearchstrings = ["@"]
-doisearchstrings = [
-            "doi: https://doi.org/",
-            "doi: http://doi.org/",
-            "doi: http://dx.doi.org/",
-            "doi: https://dx.doi.org/",
-            "doi:https://doi.org/",
-            "doi:http://doi.org/",
-            "doi:http://dx.doi.org/",
-            "doi:https://dx.doi.org/",
-            "doi:",
-            "https://doi.org/",
-            "http://doi.org/",
-            "http://dx.doi.org/",
-            "https://dx.doi.org/",
-        ]
-no_user_response_count = 0
 
 class cd:
     """Context manager for changing the current working directory"""
@@ -750,6 +749,7 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
 def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     # pmid first as they are the most likely to have errors
     workingtext = thistext
+    print (workingtext)
     p, workingtext = get_mixed_citation_blocks(workingtext)
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
     w, workingtext = [x for x in get_word_citation_blocks(workingtext) if x not in p+l]
@@ -1032,8 +1032,11 @@ def main(
     # Read input file
     with io.open(filepath, "r", encoding="utf-8") as f:
         text = f.read()
+    text = make_unicode(text)
+    if verbose:
+        print("Read input file:", filepath)
 
-    # READ FROM INPUT FILE FIRST
+    # READ YAML FROM INPUT FILE FIRST
     infileyaml = getyaml(text)
     workingyaml = copy.copy(infileyaml)
     # THEN READ FROM FILENAME.YAML
@@ -1045,8 +1048,8 @@ def main(
     if os.path.exists(yaml_file):
         with open(yaml_file) as f:
             workingyaml = mergeyaml(workingyaml, getyaml(f.read()))
-    if verbose:
-        print("Filepath:", filepath)
+    
+    # GET OUTPUTSTYLE
     input_file_extension = filepath.split('.')[-1]
     if filepath.endswith((".md", ".txt", ".qmd")):
         if outputstyle == 'null':
@@ -1072,15 +1075,6 @@ def main(
     else:
         citelabel = "."
 
-    outputfile = os.path.join(outpath, filestem + citelabel + input_file_extension)
-
-    text = make_unicode(text)
-    text = readheader(text)[1]
-    if verbose:
-        print("Read input file:", filepath)
-
-
-
     # BIB - read them all and copy into one local version
     bibfile = os.path.abspath(os.path.expanduser(bibfile))
     if 'bibliography' in workingyaml.keys():
@@ -1088,9 +1082,8 @@ def main(
     else:
         workingyaml['bibliography'] = default_localbibname  # HARD OVERWRITE
     print("Using {} as bibout".format(workingyaml['bibliography']))
-    
-    # Prepare bibliography
     localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
+    original_bib_content = None
     db, _ = read_bib_files(localbibpath)
     if localbibonly:
         print("\n*** Reading local bib file only: {} ***\n".format(localbibpath))
@@ -1099,11 +1092,12 @@ def main(
         if verbose:
             print("Reading bibfiles:", bibfile, localbibpath)
         full_bibdat, original_bib_content = read_bib_files(localbibpath, bibfile)
-    
     if force_lowercase_citations:
         print("Forcing lowercase citations")
         id_to_lower()
     make_alt_dicts()
+
+    text = readheader(text)[1]
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
 
     # Save bibliography for the current manuscript
@@ -1114,18 +1108,19 @@ def main(
         bf.write(outbib)
 
     new_bib_content = serialize_bib_database(full_bibdat)
-
     # Save new global bibliography 
-    if hash_content(original_bib_content) != hash_content(new_bib_content):
-        print('\nSaving global bibliography here:', bibfile)
-        os.makedirs(os.path.dirname(bibfile), exist_ok=True)
-        with open(bibfile, "w", encoding="utf-8") as bf:
-            bf.write(new_bib_content)
-        print("Global bibliography updated.")
-    else:
-        print("Global bibliography unchanged. Skipping write.")
+    if original_bib_content is not None:
+        if hash_content(original_bib_content) != hash_content(new_bib_content):
+            print('\nSaving global bibliography here:', bibfile)
+            os.makedirs(os.path.dirname(bibfile), exist_ok=True)
+            with open(bibfile, "w", encoding="utf-8") as bf:
+                bf.write(new_bib_content)
+            print("Global bibliography updated.")
+        else:
+            print("Global bibliography unchanged. Skipping write.")
 
     # Save new text file
+    outputfile = os.path.join(outpath, filestem + citelabel + input_file_extension)
     with io.open(outputfile, 'w', encoding='utf-8') as file:
         if outputstyle == "md":
             file.write('---\n{}\n---'.format(yaml.dump(workingyaml)).replace("\n\n", "\n"))

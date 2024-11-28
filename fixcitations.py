@@ -1085,6 +1085,7 @@ def main(
     force_lowercase_citations,
     verbose
 ):
+    global full_bibdat, local_db
     # Determine source path and filenames
     sourcepath, filename = os.path.split(filepath)
     outpath = os.path.join(sourcepath)
@@ -1161,8 +1162,14 @@ def main(
         id_to_lower(local_db)
     make_alt_dicts()
 
+    print ("===1===")
+    print_all_ids(full_bibdat)
     text = readheader(text)[1]
+    print ("===2===")
+    print_all_ids(full_bibdat)
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
+    print ("===3===")
+    print_all_ids(full_bibdat)
 
     # Save bibliography for the current manuscript
     print('\nSaving bibliography for this file here:', localbibpath)

@@ -80,8 +80,8 @@ additionaldicts = []
 def init():
     global full_bibdat
     full_bibdat = BibDatabase()
-    global db # cited
-    db = BibDatabase()
+    global local_db # cited
+    local_db = BibDatabase()
     global pmids
     pmids = {}
     global dois
@@ -90,9 +90,10 @@ def init():
     additionaldicts.append((dois, "doi"))
 init()
 
-def id_to_lower():
-    for entry in full_bibdat.entries:
+def id_to_lower(bibdat):
+    for entry in bibdat.entries:
         entry["ID"] = entry["ID"].lower()
+    bibdat._entries_dict = None
 
 def make_alt_dicts():
     for entry in full_bibdat.entries:
@@ -110,6 +111,47 @@ def make_alt_dicts():
             thisdict[entry[thislabel]] = entry
 
 def new(entry):
+    '''
+        Add new reference to full_bibdat.entries, full_bibdat.entries_dict, and all additionaldicts.
+        Merge entries by adding missing fields from the new entry.
+        If there's a conflict, the existing entry from full_bibdat takes precedence.
+    '''
+    if entry is not None:
+        if 'ENTRYTYPE' not in entry:
+            entry['ENTRYTYPE'] = 'article'
+
+        existing_entry = None
+        # Try to find existing entry by ID
+        if entry['ID'] in full_bibdat.entries_dict:
+            existing_entry = full_bibdat.entries_dict[entry['ID']]
+        else:
+            # Try to find existing entry by DOI or PMID
+            for thisdict, thislabel in additionaldicts:
+                if thislabel in entry:
+                    thisvalue = entry[thislabel]
+                    if thisvalue in thisdict:
+                        existing_entry = thisdict[thisvalue]
+                        break  # Found existing entry by DOI or PMID
+
+        if existing_entry:
+            # Merge entries, existing entry takes precedence
+            for key, value in entry.items():
+                if key not in existing_entry or not existing_entry[key]:
+                    existing_entry[key] = value
+            entry = existing_entry  # Update the entry reference
+        else:
+            # No existing entry found, add the new entry
+            entry = cleanbib(entry)
+            print("Adding new entry to bib:\n {}".format(entry['ID']))
+            full_bibdat.entries.append(entry)  
+            full_bibdat._entries_dict = None  # Invalidate the cached entries_dict
+
+        # Update additional dictionaries (e.g., pmids, dois)
+        for thisdict, thislabel in additionaldicts:
+            if thislabel in entry:
+                thisdict[entry[thislabel]] = entry
+
+def new_old(entry):
     '''
         Add new reference to full_bibdat.entries, full_bibdat.entries_dict and all additionaldicts.
         Merge entries by adding missing fields from the new entry.
@@ -140,8 +182,8 @@ def new(entry):
 
 def cite(theseids):
     """
-    Adds the specified citation IDs to the local bibliography database (db).
-    Ensures that entries in db are identical to those in full_bibdat (global bibliography).
+    Adds the specified citation IDs to the local bibliography database (local_db).
+    Ensures that entries in local_db are identical to those in full_bibdat (global bibliography).
     If an entry is not found in full_bibdat, it attempts to find and add it via online search.
     """
     if args.verbose:
@@ -151,27 +193,28 @@ def cite(theseids):
         # Ensure the citation ID is in lowercase if force_lowercase_citations is True
         if args.force_lowercase_citations:
             thisid = thisid.lower()
-        # Check if the entry is already in db
-        if thisid in db.entries_dict:
+        # Check if the entry is already in local_db
+        if thisid in local_db.entries_dict:
             continue  # Entry is already in local bibliography
         # Check if the entry exists in full_bibdat
         if thisid in full_bibdat.entries_dict:
-            # Add the entry from full_bibdat to db
-            db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
-            db.entries.append(full_bibdat.entries_dict[thisid])
+            # Add the entry from full_bibdat to local_db
+            local_db.entries.append(full_bibdat.entries_dict[thisid])
+            local_db._entries_dict = None  # Invalidate the cached entries_dict
         else:
             # Entry not found in full_bibdat, attempt to find it online
             print("ID not found in global bibtex file:", thisid)
             # Optionally attempt to find the entry online
             new_entry = findcitation(thisid, 'id')
             if new_entry:
-                # Add the new entry to full_bibdat and db
+                # Add the new entry to full_bibdat
                 new(new_entry)
-                db.entries_dict[thisid] = full_bibdat.entries_dict[thisid]
-                db.entries.append(full_bibdat.entries_dict[thisid])
+                # add it to and local_db
+                local_db.entries.append(full_bibdat.entries_dict[thisid])
+                local_db._entries_dict = None  # Invalidate the cached entries_dict
             else:
                 # Unable to find the entry
-                print("Unable to find entry for ID:", thisid)
+                print("Cite function unable to find entry for ID:", thisid)
                 fails.append(thisid)
     return fails
 
@@ -663,7 +706,8 @@ def id2pmid(theseids, notpmidlist=[]):
             full_bibdat.entries_dict[thisid]
         except:
             bestmatchingkey = find_similar_keys(thisid, full_bibdat.entries_dict)
-            print(("biblatex id not found in biblatex file: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
+            print(("id2pmid: bibtex id not found in bibtex files: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
+            print_all_ids(full_bibdat)
             continue
         # if it is found, try to get the pmid
         if 'PMID' in full_bibdat.entries_dict[thisid]:
@@ -706,17 +750,17 @@ def pmid2id(thesepmids, others):
     return outids, missing_ids
 
 def format_inline(thisid):
-    au = db.entries_dict[thisid]['Author'].split(" and ")
+    au = local_db.entries_dict[thisid]['Author'].split(" and ")
     if len(au)>1:
         au = au[0] + " et al"
     else:
         au = au[0]
     formatted_citation = "{}. {} {};{}:{}".format(
         au,
-        db.entries_dict[thisid]['Journal'].capitalize(),
-        db.entries_dict[thisid]['Year'],
-        db.entries_dict[thisid]['Volume'],
-        db.entries_dict[thisid]['Pages'],
+        local_db.entries_dict[thisid]['Journal'].capitalize(),
+        local_db.entries_dict[thisid]['Year'],
+        local_db.entries_dict[thisid]['Volume'],
+        local_db.entries_dict[thisid]['Pages'],
         )
     return formatted_citation
 
@@ -764,7 +808,6 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
 def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     # pmid first as they are the most likely to have errors
     workingtext = thistext
-    print (workingtext)
     p, workingtext = get_mixed_citation_blocks(workingtext)
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
     w, workingtext = [x for x in get_word_citation_blocks(workingtext) if x not in p+l]
@@ -1026,9 +1069,14 @@ def getlink(entry):
             url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
     return url
 
+def print_all_ids(bibdat):
+    print ("=======\nPrinting all ids:\n")
+    for entry in bibdat.entries:
+        print(entry['ID'])
+
 def main(
     filepath,
-    bibfile,
+    globalbibfile,
     yaml_file,
     wholereference,
     outputstyle,
@@ -1091,25 +1139,26 @@ def main(
         citelabel = "."
 
     # BIB - read them all and copy into one local version
-    bibfile = os.path.abspath(os.path.expanduser(bibfile))
+    globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
     if 'bibliography' in workingyaml.keys():
         print('Using YAML-specified bib:', workingyaml['bibliography'])
     else:
         workingyaml['bibliography'] = default_localbibname  # HARD OVERWRITE
-    print("Using {} as bibout".format(workingyaml['bibliography']))
     localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
+    print(f"Using {localbibpath} as bibout")
     original_bib_content = None
-    db, _ = read_bib_files(localbibpath)
+    local_db, _ = read_bib_files(localbibpath)
     if localbibonly:
         print("\n*** Reading local bib file only: {} ***\n".format(localbibpath))
         full_bibdat, _ = read_bib_files(localbibpath)
     else:
         if verbose:
-            print("Reading bibfiles:", bibfile, localbibpath)
-        full_bibdat, original_bib_content = read_bib_files(localbibpath, bibfile)
+            print("Reading bibfiles:", globalbibfile, localbibpath)
+        full_bibdat, original_bib_content = read_bib_files(localbibpath, globalbibfile)
     if force_lowercase_citations:
         print("Forcing lowercase citations")
-        id_to_lower()
+        id_to_lower(full_bibdat)
+        id_to_lower(local_db)
     make_alt_dicts()
 
     text = readheader(text)[1]
@@ -1117,18 +1166,19 @@ def main(
 
     # Save bibliography for the current manuscript
     print('\nSaving bibliography for this file here:', localbibpath)
-    outbib = bibtexparser.dumps(db)
+    outbib = bibtexparser.dumps(local_db)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)
 
     new_bib_content = serialize_bib_database(full_bibdat)
+
     # Save new global bibliography 
     if original_bib_content is not None:
         if hash_content(original_bib_content) != hash_content(new_bib_content):
-            print('\nSaving global bibliography here:', bibfile)
-            os.makedirs(os.path.dirname(bibfile), exist_ok=True)
-            with open(bibfile, "w", encoding="utf-8") as bf:
+            print('\nSaving global bibliography here:', globalbibfile)
+            os.makedirs(os.path.dirname(globalbibfile), exist_ok=True)
+            with open(globalbibfile, "w", encoding="utf-8") as bf:
                 bf.write(new_bib_content)
             print("Global bibliography updated.")
         else:
@@ -1148,7 +1198,7 @@ if __name__ == "__main__":
     # Essential arguments
     parser.add_argument("-f", '--filepath', help='Path to the input file', default="../genomicc-manuscript/manuscript.tex")
     # Additional files to specify
-    parser.add_argument('-b', '--bibfile', default=default_global_bibfile, help='BibTeX file')
+    parser.add_argument('-gb', '--globalbibfile', default=default_global_bibfile, help='BibTeX file')
     parser.add_argument('-y', '--yaml', default='_quarto.yml', help='YAML file to use')
     # Other options
     parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='Try to match whole references.')
@@ -1162,7 +1212,7 @@ if __name__ == "__main__":
     # Call the main function with parsed arguments
     main(
         filepath=os.path.abspath(os.path.expanduser(args.filepath)),
-        bibfile=args.bibfile,
+        globalbibfile=args.globalbibfile,
         yaml_file=args.yaml,
         wholereference=args.wholereference,
         outputstyle=args.outputstyle,
@@ -1171,3 +1221,5 @@ if __name__ == "__main__":
         force_lowercase_citations=args.force_lowercase_citations,
         verbose=args.verbose
     )
+
+

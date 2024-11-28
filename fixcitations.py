@@ -110,75 +110,66 @@ def make_alt_dicts():
                 pass
             thisdict[entry[thislabel]] = entry
 
-def new(entry):
+def add_entry_to_bibdatabase(entry, bib_database, additional_dicts=None):
     '''
-        Add new reference to full_bibdat.entries, full_bibdat.entries_dict, and all additionaldicts.
-        Merge entries by adding missing fields from the new entry.
-        If there's a conflict, the existing entry from full_bibdat takes precedence.
-    '''
-    if entry is not None:
-        if 'ENTRYTYPE' not in entry:
-            entry['ENTRYTYPE'] = 'article'
+    Adds a new entry to the given BibDatabase object, checking for duplicates based on ID, DOI, and PMID.
+    Merges entries if a duplicate is found, giving precedence to existing data.
 
-        existing_entry = None
-        # Try to find existing entry by ID
-        if entry['ID'] in full_bibdat.entries_dict:
-            existing_entry = full_bibdat.entries_dict[entry['ID']]
-        else:
-            # Try to find existing entry by DOI or PMID
-            for thisdict, thislabel in additionaldicts:
-                if thislabel in entry:
-                    thisvalue = entry[thislabel]
-                    if thisvalue in thisdict:
-                        existing_entry = thisdict[thisvalue]
+    Parameters:
+    - entry: The new BibTeX entry as a dictionary.
+    - bib_database: The BibDatabase object to which the entry should be added.
+    - additional_dicts: A list of tuples containing dictionaries for additional identifiers (e.g., DOI, PMID)
+      and their corresponding field names in entries. Example: [(dois_dict, 'doi'), (pmids_dict, 'pmid')]
+
+    Returns:
+    - None. The function modifies bib_database in place.
+    '''
+
+    if entry is None:
+        return  # Nothing to add
+
+    # Ensure the entry has an ENTRYTYPE
+    if 'ENTRYTYPE' not in entry:
+        entry['ENTRYTYPE'] = 'article'
+
+    existing_entry = None
+
+    # First, try to find an existing entry by ID
+    if entry['ID'] in bib_database.entries_dict:
+        existing_entry = bib_database.entries_dict[entry['ID']]
+    else:
+        # If not found by ID, try to find by DOI or PMID
+        if additional_dicts:
+            for id_dict, id_field in additional_dicts:
+                if id_field in entry:
+                    id_value = entry[id_field]
+                    if id_value in id_dict:
+                        existing_entry = id_dict[id_value]
                         break  # Found existing entry by DOI or PMID
 
-        if existing_entry:
-            # Merge entries, existing entry takes precedence
-            for key, value in entry.items():
-                if key not in existing_entry or not existing_entry[key]:
-                    existing_entry[key] = value
-            entry = existing_entry  # Update the entry reference
-        else:
-            # No existing entry found, add the new entry
-            entry = cleanbib(entry)
-            print("Adding new entry to bib:\n {}".format(entry['ID']))
-            full_bibdat.entries.append(entry)  
-            full_bibdat._entries_dict = None  # Invalidate the cached entries_dict
+    if existing_entry:
+        # Merge the new entry into the existing one
+        # Existing data takes precedence
+        for key, value in entry.items():
+            if key not in existing_entry or not existing_entry[key]:
+                existing_entry[key] = value
+        # No need to add to entries list or entries_dict, as existing_entry is already in bib_database
+    else:
+        # No existing entry found, add the new entry
+        # Clean the entry if necessary (e.g., convert to LaTeX encoding)
+        # entry = cleanbib(entry)  # Uncomment if you have a cleanbib function
+        print("Adding new entry to bib_database:\n {}".format(entry['ID']))
+        bib_database.entries.append(entry)
+        # Invalidate the entries_dict cache
+        bib_database._entries_dict = None
 
-        # Update additional dictionaries (e.g., pmids, dois)
-        for thisdict, thislabel in additionaldicts:
-            if thislabel in entry:
-                thisdict[entry[thislabel]] = entry
+    # Update the additional identifier dictionaries
+    if additional_dicts:
+        for id_dict, id_field in additional_dicts:
+            if id_field in entry:
+                id_value = entry[id_field]
+                id_dict[id_value] = entry
 
-def new_old(entry):
-    '''
-        Add new reference to full_bibdat.entries, full_bibdat.entries_dict and all additionaldicts.
-        Merge entries by adding missing fields from the new entry.
-        If there's a conflict, the existing entry from full_bibdat takes precedence.
-    '''
-    if entry is not None:
-        try:
-            entry['ENTRYTYPE']
-        except:
-            entry['ENTRYTYPE'] = 'article'
-        already_in = False
-        try:
-            existing_entry = full_bibdat.entries_dict[entry['ID']]
-            # Merge entries, existing entry takes precedence
-            for key, value in entry.items():
-                if key not in existing_entry or not existing_entry[key]:
-                    existing_entry[key] = value
-            entry = existing_entry  # Update the entry reference
-        except KeyError:
-            entry = cleanbib(entry)
-            print("Adding new entry to bib:\n {}".format(entry['ID']))
-            full_bibdat.entries_dict[entry['ID']] = entry
-            full_bibdat.entries = [entry] + full_bibdat.entries
-        # Update additional dictionaries (e.g., pmids, dois)
-        for thisdict, thislabel in additionaldicts:
-            if thislabel in entry:
-                thisdict.setdefault(entry[thislabel], entry)
 
 def cite(theseids):
     """
@@ -198,20 +189,15 @@ def cite(theseids):
             continue  # Entry is already in local bibliography
         # Check if the entry exists in full_bibdat
         if thisid in full_bibdat.entries_dict:
-            # Add the entry from full_bibdat to local_db
-            local_db.entries.append(full_bibdat.entries_dict[thisid])
-            local_db._entries_dict = None  # Invalidate the cached entries_dict
+            add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], local_db, additional_dicts=None)
         else:
             # Entry not found in full_bibdat, attempt to find it online
             print("ID not found in global bibtex file:", thisid)
             # Optionally attempt to find the entry online
             new_entry = findcitation(thisid, 'id')
             if new_entry:
-                # Add the new entry to full_bibdat
-                new(new_entry)
-                # add it to and local_db
-                local_db.entries.append(full_bibdat.entries_dict[thisid])
-                local_db._entries_dict = None  # Invalidate the cached entries_dict
+                add_entry_to_bibdatabase(new_entry, full_bibdat, additional_dicts=additionaldicts)
+                add_entry_to_bibdatabase(new_entry, local_db, additional_dicts=None)
             else:
                 # Unable to find the entry
                 print("Cite function unable to find entry for ID:", thisid)
@@ -393,10 +379,10 @@ def flatten(thislist):
     else:
         return [item for sublist in thislist for item in sublist] #flatten list
 
-nbspace = re.compile(u"\N{NO-BREAK SPACE}", re.IGNORECASE)
 def make_unicode(inputstring):
     if type(inputstring) != str:
         inputstring =  inputstring.decode('utf-8')
+    nbspace = re.compile(u"\N{NO-BREAK SPACE}", re.IGNORECASE)
     inputstring = nbspace.sub(" ", inputstring)
     inputstring = inputstring.replace(u"\u2003", " ") # nonbreaking space
     inputstring = inputstring.replace(u"\u0391", "$\alpha$") # alpha
@@ -620,7 +606,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
     '''
         search the bibdat first
         search online in a variety of ways
-        if found, use new to add it to global db
+        if found, add it to global db
         return a single bibtex entry
         or None if not found or in doubt
     '''
@@ -638,7 +624,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
             if pub[0] != 'null' and pub[0] != None:
                 print ("PMID:{} found online".format(info))
                 print (pub[0])
-                new(pub[0])
+                add_entry_to_bibdatabase(pub[0], full_bibdat, additional_dicts=additionaldicts)
                 return pub[0]
         print ("PMID:{} NOT FOUND ON PUBMED".format(info))
         return None
@@ -654,7 +640,7 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
             if len(pubent) > 0:
                 if pubent[0] != 'null' and pubent[0] != None:
                     print (msg + "but found in pubmed: {}".format(pubent[0]))
-                    new(pubent[0])
+                    add_entry_to_bibdatabase(pubent[0], full_bibdat, additional_dicts=additionaldicts)
                     return pubent[0]
         print (msg + ", nor in pubmed")
         return None
@@ -690,7 +676,7 @@ Enter y/n within 10 seconds".format(
                         q = q.strip().upper()
                         if q == "Y":
                             print ('--confirmed--')
-                            new(pubent[0])
+                            add_entry_to_bibdatabase(pubent[0], full_bibdat, additional_dicts=additionaldicts)
                             return pubent[0]
         return None
 
@@ -707,7 +693,6 @@ def id2pmid(theseids, notpmidlist=[]):
         except:
             bestmatchingkey = find_similar_keys(thisid, full_bibdat.entries_dict)
             print(("id2pmid: bibtex id not found in bibtex files: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
-            print_all_ids(full_bibdat)
             continue
         # if it is found, try to get the pmid
         if 'PMID' in full_bibdat.entries_dict[thisid]:
@@ -744,7 +729,7 @@ def pmid2id(thesepmids, others):
             new_entry = findcitation(pmid, 'pmid')
             if new_entry is not None:
                 outids.append(new_entry['ID'])
-                new(new_entry)
+                add_entry_to_bibdatabase(new_entry, full_bibdat, additional_dicts=additionaldicts)
             else:
                 missing_ids.append(pmid)
     return outids, missing_ids
@@ -806,9 +791,8 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
     return blockstring
 
 def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
-    # pmid first as they are the most likely to have errors
     workingtext = thistext
-    p, workingtext = get_mixed_citation_blocks(workingtext)
+    p, workingtext = get_mixed_citation_blocks(workingtext) # pmid first as they are the most likely to have errors
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
     w, workingtext = [x for x in get_word_citation_blocks(workingtext) if x not in p+l]
     if use_whole:
@@ -1162,14 +1146,8 @@ def main(
         id_to_lower(local_db)
     make_alt_dicts()
 
-    print ("===1===")
-    print_all_ids(full_bibdat)
     text = readheader(text)[1]
-    print ("===2===")
-    print_all_ids(full_bibdat)
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
-    print ("===3===")
-    print_all_ids(full_bibdat)
 
     # Save bibliography for the current manuscript
     print('\nSaving bibliography for this file here:', localbibpath)

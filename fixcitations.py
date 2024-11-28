@@ -95,6 +95,7 @@ def id_to_lower(bibdat):
     for entry in bibdat.entries:
         entry["ID"] = entry["ID"].lower()
     bibdat._entries_dict = None
+    return bibdat
 
 def make_alt_dicts():
     for entry in full_bibdat.entries:
@@ -705,7 +706,7 @@ def get_searchstring_from_wholecitation(wc):
                 else:
                     return clean_searchstring(x[0])
 
-def get_wholereference_citation_blocks(inputtext):
+def get_wholereference_citation_blocks(inputtext, force_lowercase=False):
     '''
         finds wholecitations AND doi
         return a list of citation blocks, and new input text with these removed
@@ -715,13 +716,13 @@ def get_wholereference_citation_blocks(inputtext):
         for b in get_parenthesised(inputtext, [theseparetheses]):
             b = b.replace('\n',' ')
             if "." in b or ":" in b:
-                new_entry = parse_wholecitation_block(b)
+                new_entry = parse_wholecitation_block(b, force_lowercase)
                 if new_entry is not None:
                     confirmed_blocks.append(str(b))
                     inputtext = inputtext.replace(b, '---citationblockremoved---')
     return confirmed_blocks, inputtext
 
-def parse_citation_block(thisblock):
+def parse_citation_block(thisblock, force_lowercase=False):
     results = {
         'pmids':[],
         'ids':[],
@@ -749,6 +750,8 @@ def parse_citation_block(thisblock):
                 results['notfound'].append(thisid)
         else:
             results['notfound'].append(thisid)
+    if force_lowercase:
+        results['ids'] = [x.lower() for x in results['ids']]
     return results
 
 def casereplace(thistext, catchall, cleanversion):
@@ -769,14 +772,14 @@ def clean_id(thisid):
     return thisid
 
 askedalready = {}
-def parse_wholecitation_block(thisblock):
+def parse_wholecitation_block(thisblock, force_lowercase=False):
     ''' take a block of text, and return two lists of ids '''
     try:
         return askedalready[thisblock]
     except:
         outids = []
         # try a doi search first in case there's a doi in there
-        d = parse_citation_block(thisblock)
+        d = parse_citation_block(thisblock, force_lowercase)
         if len(d['ids'])>0:
             print ("untested: returning ids:", d['ids'])
             outids = d['ids']
@@ -788,6 +791,8 @@ def parse_wholecitation_block(thisblock):
                 if found is not None:
                     outids.append(found['ID'])
         askedalready[thisblock] = outids, []
+        if force_lowercase:
+            outids = [x.lower() for x in outids]
         return outids, []  # there is only ever one
 
 def findcitation(info, infotype='pmid', additionalinfo=''):
@@ -1014,7 +1019,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
     w, workingtext = [x for x in get_word_citation_blocks(workingtext) if x not in p+l]
     if use_whole:
-        r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext) if x not in p+l+w]
+        r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext, flc) if x not in p+l+w]
     else:
         r=[]
     print ("Number blocks using pmid or doi or md:{}".format(len(p)))
@@ -1023,7 +1028,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     replacedict = {}
     # there are slightly different procedures for each reference type:
     for b in p+l+w:
-        citedhere = parse_citation_block(b)
+        citedhere = parse_citation_block(b, flc)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib
             theseids = list(set(theseids+citedhere['ids']))
@@ -1035,7 +1040,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
         else:
             continue
     for b in r:
-        theseids, theseothers = parse_wholecitation_block(b)
+        theseids, theseothers = parse_wholecitation_block(b, flc)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             replacedict[b] = mdout(theseids, theseothers, outputstyle, flc=flc)
         elif outputstyle=='pmid':
@@ -1342,7 +1347,7 @@ def main(
         citelabel = "."
 
     # BIB - read them all and copy into one local version
-    globalbibfile = os.path.abspath(os.path.expanduser(bibfile))
+    globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
     if 'bibliography' in workingyaml.keys():
         print('Using YAML-specified bib:', workingyaml['bibliography'])
     else:
@@ -1352,13 +1357,13 @@ def main(
     original_bib_content = None
 
     # Read bib files and get ID changes
-    full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath, bibfile)
+    full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath, globalbibfile)
 
     # Force lowercase citations if required
     if force_lowercase_citations:
         print("Forcing lowercase citations")
-        id_to_lower(full_bibdat)
-        id_to_lower(local_db)
+        full_bibdat = id_to_lower(full_bibdat)
+        local_db = id_to_lower(local_db)
 
     # Rebuild additional dictionaries
     make_alt_dicts()

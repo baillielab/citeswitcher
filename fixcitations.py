@@ -1403,6 +1403,9 @@ def main(
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations, id_changes=id_changes)
 
     # Save bibliography for the current manuscript
+    bibdir, bibfilename = os.path.split(localbibpath)
+    bibstem = '.'.join(bibfilename.split('.')[:-1])
+    localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")
     print('\nSaving bibliography for this file here:', localbibpath)
     outbib = bibtexparser.dumps(local_db)
     outbib = make_unicode(outbib)

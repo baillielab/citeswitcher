@@ -5,3 +5,4 @@ config_local.json
 __pycache__*
 .DS_Store
 _development/*
+README_files/*

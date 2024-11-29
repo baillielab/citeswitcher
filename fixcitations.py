@@ -13,6 +13,7 @@ import re
 import requests
 import select
 import sys
+from collections import OrderedDict
 import xml.etree.ElementTree as ET
 
 scriptpath = os.path.dirname(os.path.realpath(__file__))
@@ -91,6 +92,35 @@ def init():
     additionaldicts.append((dois, "doi"))
 init()
 
+class cd:
+    """Context manager for changing the current working directory"""
+    """ by Brian M. Hunt https://stackoverflow.com/users/19212/brian-m-hunt"""
+    '''
+    use like this:
+    with cd(scriptpath):
+        ...nested code
+    '''
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
+def remove_duplicates_preserve_order(thislist):
+    return list(OrderedDict.fromkeys(thislist))
+
+def fix_permissions(this_path):
+    os.system("/bin/chmod 755 %s"%(this_path))
+
+def check_dir(this_dir):
+    if not os.path.isdir(this_dir):
+        os.mkdir(this_dir)
+    fix_permissions(this_dir)
+
 def id_to_lower(bibdat):
     for entry in bibdat.entries:
         entry["ID"] = entry["ID"].lower()
@@ -155,7 +185,8 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
         # No existing entry found, add the new entry
         # Clean the entry if necessary (e.g., convert to LaTeX encoding)
         # entry = cleanbib(entry)  # Uncomment if you have a cleanbib function
-        print("Adding new entry to bib databases:\n {}".format(entry['ID']))
+        if args.verbose:
+            print("Adding new entry to bib databases:\n {}".format(entry['ID']))
         bibdat.entries.append(entry)
         # Invalidate the entries_dict cache
         #bibdat._entries_dict = None
@@ -230,31 +261,6 @@ def getconfig(cfgfile="null"):
         sys.exit()
     return data
 
-class cd:
-    """Context manager for changing the current working directory"""
-    """ by Brian M. Hunt https://stackoverflow.com/users/19212/brian-m-hunt"""
-    '''
-    use like this:
-    with cd(scriptpath):
-        ...nested code
-    '''
-    def __init__(self, newPath):
-        self.newPath = os.path.expanduser(newPath)
-
-    def __enter__(self):
-        self.savedPath = os.getcwd()
-        os.chdir(self.newPath)
-
-    def __exit__(self, etype, value, traceback):
-        os.chdir(self.savedPath)
-
-def fix_permissions(this_path):
-    os.system("/bin/chmod 755 %s"%(this_path))
-
-def check_dir(this_dir):
-    if not os.path.isdir(this_dir):
-        os.mkdir(this_dir)
-    fix_permissions(this_dir)
 
 def merge_entries(entry1, entry2):
     """
@@ -309,7 +315,8 @@ def merge_local_and_global_bib(local_bib_database, global_bib_database):
                 entries_by_doi[merged_entry['doi']] = merged_entry
             if 'pmid' in merged_entry:
                 entries_by_pmid[merged_entry['pmid']] = merged_entry
-            print(f"Merged local entry into global for ID: {merged_entry['ID']}")
+            if args.verbose:
+                print(f"Merged local entry into global for ID: {merged_entry['ID']}")
         else:
             # No duplicate, add to combined entries
             combined_entries_by_id[entry_id] = entry
@@ -348,21 +355,21 @@ def handle_duplicates_in_bib(bibdat):
         if entry_id in entries_by_id:
             existing_entry = entries_by_id[entry_id]
             merge_needed = True
-            print(f"Found duplicate by ID. Entry ID: {entry_id}, Existing Entry ID: {existing_entry['ID']}")
+            print(f"Found duplicate by ID: {entry_id}. Contents will be merged.")
         # Check for duplicate by DOI
         elif doi and doi in entries_by_doi:
             existing_entry = entries_by_doi[doi]
             merge_needed = True
             if entry_id != existing_entry['ID']:
                 id_changes[entry_id] = existing_entry['ID']
-                print(f"Found duplicate by DOI. Entry ID: {entry_id}, Existing Entry ID: {existing_entry['ID']}")
+                print(f"Found duplicate by DOI. {entry_id} will be replaced with: {existing_entry['ID']} by merging contents")
         # Check for duplicate by PMID
         elif pmid and pmid in entries_by_pmid:
             existing_entry = entries_by_pmid[pmid]
             merge_needed = True
             if entry_id != existing_entry['ID']:
                 id_changes[entry_id] = existing_entry['ID']
-                print(f"Found duplicate by PMID. Entry ID: {entry_id}, Existing Entry ID: {existing_entry['ID']}")
+                print(f"Found duplicate by PMID. {entry_id} will be replaced with: {existing_entry['ID']} by merging contents")
 
         if merge_needed:
             # Merge entries
@@ -376,7 +383,6 @@ def handle_duplicates_in_bib(bibdat):
             # Replace existing entry in new_entries
             index = new_entries.index(existing_entry)
             new_entries[index] = merged_entry
-            print(f"Merged duplicate entries for ID: {merged_entry['ID']}")
         else:
             # No duplicate, add to entries
             entries_by_id[entry_id] = entry
@@ -432,8 +438,6 @@ def read_bib_files(localbibfile, globalbibfile=None):
 
     # Handle duplicates within the local bib file
     local_bib_database, id_changes_local = handle_duplicates_in_bib(local_bib_database)
-    if args.verbose: 
-        print ("id_changes_local:", id_changes_local)
 
     # Read and parse the global bib file
     global_bib_database = BibDatabase()
@@ -621,11 +625,12 @@ def get_parenthesised(thistext,parentheses=[squarebrackets, commentedsquarebrack
         else:
             nested_out.append(item)
     for thislabel in markdown_labels_to_ignore:
-        for x in nested_out:
-            if re.match(thislabel, x[1:]):
-                if not x[1:].startswith(thislabel):
-                    print ("regex picked up this match: {} {} which was missed by startswith".format(x[1:], thislabel))
         nested_out = [x for x in nested_out if not re.match(thislabel, x[1:])]
+        if args.verbose:
+            for x in nested_out:
+                if re.match(thislabel, x[1:]):
+                    if not x[1:].startswith(thislabel):
+                        print ("regex picked up this match: {} {} which was missed by startswith".format(x[1:], thislabel))
     return nested_out
 
 def remove_parentheses(thistext):
@@ -814,7 +819,7 @@ def parse_wholecitation_block(thisblock, force_lowercase=False):
             outids = [x.lower() for x in outids]
         return outids, []  # there is only ever one
 
-def findcitation(info, infotype='pmid', additionalinfo=''):
+def findcitation(info, infotype='pmid', additionalinfo='', force_search=False):
     '''
         search the bibdat first
         search online in a variety of ways
@@ -825,12 +830,12 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
     global no_user_response_count
     info = str(info.strip())
     if infotype == 'pmid':
-        try:
-            print ("searching for {} in bibdat".format(info))
-            return pmids[info]
-        except:
-            print ("{} not found in pmids: ".format(info))
-            pass
+        if not force_search:
+            try:
+                return pmids[info]
+            except:
+                print ("{} not found in pmids: ".format(info))
+                pass
         pub = p2b([info])
         if len(pub) > 0:
             if pub[0] != 'null' and pub[0] != None:
@@ -842,10 +847,11 @@ def findcitation(info, infotype='pmid', additionalinfo=''):
         return None
     elif infotype == 'doi':
         msg=""
-        try:
-            return dois[info]
-        except:
-            msg += ("DOI not in bib file: {}".format(info))
+        if not force_search:
+            try:
+                return dois[info]
+            except:
+                msg += ("DOI not in bib file: {}".format(info))
         pub = search_pubmed(info, "doi")
         if len(pub) == 1:
             pubent = p2b(pub[0])
@@ -913,20 +919,21 @@ def id2pmid(theseids, notpmidlist=[]):
             pmidlist.append(full_bibdat.entries_dict[thisid]['pmid'])
         else:
             print ("PMID not found in bib file: {}. Searching online...".format(thisid))
-            try:
-                new_entry = findcitation(full_bibdat.entries_dict[thisid]['doi'], 'doi')
-            except:
-                notpmidlist.append(thisid) # hack
-                new_entry = full_bibdat.entries_dict[thisid]
+            if 'doi' in full_bibdat.entries_dict[thisid]:
+                if args.verbose: 
+                    print (f"searching pubmed for DOI: {full_bibdat.entries_dict[thisid]['doi']}")
+                new_entry = findcitation(full_bibdat.entries_dict[thisid]['doi'], 'doi', '', force_search=True)
+            elif 'title' in full_bibdat.entries_dict[thisid]:
+                if args.verbose: 
+                    print (f"searching pubmed for Title: {full_bibdat.entries_dict[thisid]['title']}")
+                new_entry = findcitation(full_bibdat.entries_dict[thisid]['title'], 'title', additionalinfo='', force_search=True)
             if new_entry is None:
-                new_entry = findcitation(full_bibdat.entries_dict[thisid]['title'], 'title')
-                if new_entry is None:
-                    notpmidlist.append(thisid)
-                    continue
-            try:
+                notpmidlist.append(thisid)
+                continue
+            if 'pmid' in new_entry:
                 pmidlist.append(new_entry['pmid'])
                 pmids[new_entry['pmid']] = new_entry
-            except:
+            else:
                 notpmidlist.append(thisid)
     return pmidlist, notpmidlist
 
@@ -962,7 +969,9 @@ def format_inline(thisid):
     return formatted_citation
 
 def pmidout(pmidlist, notpmidlist):
-    # make a blockstring
+    '''
+    make a blockstring to replace PMIDs in a citation list
+    '''
     blockstring = ''
     if len(pmidlist) > 0:
         # add to the outputdatabase if possible but since PMID is the output format, it doesn't matter if we can't find it
@@ -980,6 +989,9 @@ def pmidout(pmidlist, notpmidlist):
     return blockstring
 
 def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
+    '''
+    make a blockstring to replace IDs in a citation list
+    '''
     if len(theseids) == 0:
         return 'null'
     if flc:
@@ -1005,34 +1017,35 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
 def replace_ids_in_text(text, id_changes):
     """
     Replace occurrences of old IDs with new IDs in the text, using the global regex patterns.
+    Returns both the updated text and a report of changes made.
+    
+    Returns:
+        tuple: (updated_text, report) where report is a string describing all changes made
     """
-    # Compile the regex patterns
     patterns = [
         markdown_citations,
         latexbrackets
     ]
-    
-    # Combine all patterns into one for efficiency
     combined_pattern = '(' + '|'.join(patterns) + ')'
-    
-    # Function to replace IDs within a matched citation block
+    report_lines = []    
     def replace_ids_in_match(match):
         citation_block = match.group(0)
         original_block = citation_block  # Keep for debugging
         for old_id, new_id in id_changes.items():
-            if old_id != new_id:
-                # Use word boundaries to match whole IDs only
+            if old_id != new_id:  # Use word boundaries to match whole IDs only
                 citation_block = re.sub(r'\b' + re.escape(old_id) + r'\b', new_id, citation_block)
         if citation_block != original_block:
-            if args.verbose:
-                print(f"Replaced IDs in citation block: {original_block} --> {citation_block}")
+            newline = "{:>80} ==> {}".format(original_block, citation_block)
+            if newline not in report_lines:
+                report_lines.append(newline)
         return citation_block
-
-    # Apply the replacement function to all citation blocks in the text
+    
     updated_text = re.sub(combined_pattern, replace_ids_in_match, text)
-    return updated_text
+    report = "\n".join(report_lines) if report_lines else "No replacements made"
+    
+    return updated_text, report
 
-def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, id_changes={}):
+def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, report_text=""):
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext) # pmid first as they are the most likely to have errors
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
@@ -1041,7 +1054,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, id_ch
         r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext, flc) if x not in p+l+w]
     else:
         r=[]
-    print ("Number blocks using pmid or doi or md:{}".format(len(p)))
+    print ("\nNumber blocks using pmid or doi or md:{}".format(len(p)))
     print ("Number blocks using latex:{}".format(len(l)))
     print ("Number blocks using wholeref:{}".format(len(r)))
     replacedict = {}
@@ -1050,11 +1063,11 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, id_ch
         citedhere = parse_citation_block(b, flc)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib
-            theseids = list(set(theseids+citedhere['ids']))
+            theseids = remove_duplicates_preserve_order(theseids+citedhere['ids'])
             replacedict[b] = mdout(theseids, notfound, outputstyle, flc=flc)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(citedhere['ids'], citedhere['notfound']) # ids added to bib
-            pm = list(set(pm+citedhere['pmids']))
+            pm = remove_duplicates_preserve_order(pm+citedhere['pmids'])
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
@@ -1067,17 +1080,16 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, id_ch
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
-    reverse_id_changes = {new_id: old_id for old_id, new_id in id_changes.items()}
+    if len(report_text)>0:
+        print ("\n ID changes in the following citations:")
+        print (report_text)
+    if len(replacedict)>0:
+        print ("\n Citations replaced in text:")
     for b in replacedict:
-        if b in reverse_id_changes:
-            bout = reverse_id_changes[b]
-            print(f"{b} is the replacement for {old_id}")
-        else:
-            bout = b
-            if replacedict[b] == 'null':
-                print ("{:>80} ... left alone".format(b))
-                continue
-        print ("{:>80} ==> {}".format(bout, replacedict[b]))
+        if replacedict[b] == 'null' or b==replacedict[b]:
+            print ("{:>80} ... left alone".format(b))
+            continue
+        print ("{:>80} ==> {}".format(b, replacedict[b]))
         thistext = thistext.replace(b, replacedict[b])
     return thistext
 
@@ -1397,10 +1409,10 @@ def main(
     if id_changes:
         if args.verbose:
             print ("ID changes",  id_changes)
-        text = replace_ids_in_text(text, id_changes)
+        text, id_change_report = replace_ids_in_text(text, id_changes)
 
     text = readheader(text)[1]
-    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations, id_changes=id_changes)
+    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations, report_text=id_change_report)
 
     # Save bibliography for the current manuscript
     bibdir, bibfilename = os.path.split(localbibpath)

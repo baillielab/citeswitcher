@@ -94,7 +94,8 @@ init()
 def id_to_lower(bibdat):
     for entry in bibdat.entries:
         entry["ID"] = entry["ID"].lower()
-    bibdat._entries_dict = None
+    #bibdat._entries_dict = None
+    bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
     return bibdat
 
 def make_alt_dicts():
@@ -112,19 +113,19 @@ def make_alt_dicts():
                 pass
             thisdict[entry[thislabel]] = entry
 
-def add_entry_to_bibdatabase(entry, bib_database, additional_dicts=None):
+def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
     '''
     Adds a new entry to the given BibDatabase object, checking for duplicates based on ID, DOI, and PMID.
     Merges entries if a duplicate is found, giving precedence to existing data.
 
     Parameters:
     - entry: The new BibTeX entry as a dictionary.
-    - bib_database: The BibDatabase object to which the entry should be added.
+    - bibdat: The BibDatabase object to which the entry should be added.
     - additional_dicts: A list of tuples containing dictionaries for additional identifiers (e.g., DOI, PMID)
       and their corresponding field names in entries. Example: [(dois_dict, 'doi'), (pmids_dict, 'pmid')]
 
     Returns:
-    - None. The function modifies bib_database in place.
+    - None. The function modifies bibdat in place.
     '''
 
     if entry is None:
@@ -137,8 +138,8 @@ def add_entry_to_bibdatabase(entry, bib_database, additional_dicts=None):
     existing_entry = None
 
     # First, try to find an existing entry by ID
-    if entry['ID'] in bib_database.entries_dict:
-        existing_entry = bib_database.entries_dict[entry['ID']]
+    if entry['ID'] in bibdat.entries_dict:
+        existing_entry = bibdat.entries_dict[entry['ID']]
     else:
         # If not found by ID, try to find by DOI or PMID
         if additional_dicts:
@@ -155,15 +156,16 @@ def add_entry_to_bibdatabase(entry, bib_database, additional_dicts=None):
         for key, value in entry.items():
             if key not in existing_entry or not existing_entry[key]:
                 existing_entry[key] = value
-        # No need to add to entries list or entries_dict, as existing_entry is already in bib_database
+        # No need to add to entries list or entries_dict, as existing_entry is already in bibdat
     else:
         # No existing entry found, add the new entry
         # Clean the entry if necessary (e.g., convert to LaTeX encoding)
         # entry = cleanbib(entry)  # Uncomment if you have a cleanbib function
-        print("Adding new entry to bib_database:\n {}".format(entry['ID']))
-        bib_database.entries.append(entry)
+        print("Adding new entry to bibdat:\n {}".format(entry['ID']))
+        bibdat.entries.append(entry)
         # Invalidate the entries_dict cache
-        bib_database._entries_dict = None
+        #bibdat._entries_dict = None
+        bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
 
     # Update the additional identifier dictionaries
     if additional_dicts:
@@ -190,9 +192,10 @@ def cite(theseids):
         if thisid in local_db.entries_dict:
             continue  # Entry is already in local bibliography
         # Check if the entry exists in full_bibdat
-        if thisid in full_bibdat.entries_dict:
+        try:
+            full_bibdat.entries_dict[thisid]
             add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], local_db, additional_dicts=None)
-        else:
+        except:
             # Entry not found in full_bibdat, attempt to find it online
             print("ID not found in global bibtex file:", thisid)
             # Optionally attempt to find the entry online
@@ -325,13 +328,14 @@ def merge_local_and_global_bib(local_bib_database, global_bib_database):
     # Create combined bib database
     combined_bib_database = BibDatabase()
     combined_bib_database.entries = list(combined_entries_by_id.values())
-    combined_bib_database._entries_dict = None  # Invalidate cache
+    #combined_bib_database._entries_dict = None  # Invalidate cache
+    combined_bib_database.entries = combined_bib_database.entries
     return combined_bib_database, id_changes
 
-def handle_duplicates_in_bib(bib_database):
+def handle_duplicates_in_bib(bibdat):
     """
     Handle duplicates within a bib database by merging entries that have the same ID, DOI, or PMID.
-    Returns the updated bib_database and a mapping of old IDs to new IDs.
+    Returns the updated bibdat and a mapping of old IDs to new IDs.
     """
     entries_by_id = {}
     entries_by_doi = {}
@@ -339,7 +343,9 @@ def handle_duplicates_in_bib(bib_database):
     new_entries = []
     id_changes = {}  # Mapping of old IDs to new IDs
 
-    for entry in bib_database.entries:
+    print ("about to loop through all of these:", bibdat.entries)
+
+    for entry in bibdat.entries:
         entry_id = entry['ID']
         doi = entry.get('doi')
         pmid = entry.get('pmid')
@@ -351,16 +357,21 @@ def handle_duplicates_in_bib(bib_database):
         if entry_id in entries_by_id:
             existing_entry = entries_by_id[entry_id]
             merge_needed = True
+            print(f"Found duplicate by ID. Entry ID: {entry_id}, Existing Entry ID: {existing_entry['ID']}")
         # Check for duplicate by DOI
         elif doi and doi in entries_by_doi:
             existing_entry = entries_by_doi[doi]
             merge_needed = True
-            id_changes[entry_id] = existing_entry['ID']
+            if entry_id != existing_entry['ID']:
+                id_changes[entry_id] = existing_entry['ID']
+                print(f"Found duplicate by DOI. Entry ID: {entry_id}, Existing Entry ID: {existing_entry['ID']}")
         # Check for duplicate by PMID
         elif pmid and pmid in entries_by_pmid:
             existing_entry = entries_by_pmid[pmid]
             merge_needed = True
-            id_changes[entry_id] = existing_entry['ID']
+            if entry_id != existing_entry['ID']:
+                id_changes[entry_id] = existing_entry['ID']
+                print(f"Found duplicate by PMID. Entry ID: {entry_id}, Existing Entry ID: {existing_entry['ID']}")
 
         if merge_needed:
             # Merge entries
@@ -384,14 +395,28 @@ def handle_duplicates_in_bib(bib_database):
                 entries_by_pmid[pmid] = entry
             new_entries.append(entry)
 
-    # Update bib_database entries
-    bib_database.entries = new_entries
-    bib_database._entries_dict = None  # Invalidate cache
-    return bib_database, id_changes
+    # Update bibdat entries
+    bibdat.entries = new_entries
+    bibdat.entries = bibdat.entries
+    #bibdat._entries_dict = None  # Invalidate cache
+    return bibdat, id_changes
+
+def parse_bib_contents(bibfilecontents):
+    try:
+        bib_database = bibtexparser.bparser.BibTexParser(
+            common_strings=True,
+            homogenize_fields=True,
+            interpolate_strings=False
+        ).parse(bibfilecontents, partial=False)
+        return bib_database
+    except Exception as e:
+        print(f"Error parsing parse_bib_contents: {e}")
+        return BibDatabase()
 
 def read_bib_files(localbibfile, globalbibfile=None):
     original_contents = ""
     # Read and parse the local bib file
+    parser = BibTexParser(common_strings=True)
     local_bib_database = BibDatabase()
     if os.path.exists(localbibfile):
         size = os.path.getsize(localbibfile)
@@ -402,8 +427,9 @@ def read_bib_files(localbibfile, globalbibfile=None):
             except UnicodeDecodeError:
                 with open(localbibfile, encoding="latin1") as bf:
                     content = bf.read()
+            local_bib_database = parse_bib_contents(content)
             try:
-                local_bib_database = bibtexparser.loads(content)
+                local_bib_database = parse_bib_contents(content)
             except Exception as e:
                 print(f"Error parsing BibTeX file {localbibfile}: {e}")
         else:
@@ -415,6 +441,8 @@ def read_bib_files(localbibfile, globalbibfile=None):
 
     # Handle duplicates within the local bib file
     local_bib_database, id_changes_local = handle_duplicates_in_bib(local_bib_database)
+    if args.verbose: 
+        print ("id_changes_local:", id_changes_local)
 
     # Read and parse the global bib file
     global_bib_database = BibDatabase()
@@ -429,7 +457,7 @@ def read_bib_files(localbibfile, globalbibfile=None):
                     content = bf.read()
             original_contents = content
             try:
-                global_bib_database = bibtexparser.loads(content)
+                global_bib_database = parse_bib_contents(content)
             except Exception as e:
                 print(f"Error parsing BibTeX file {globalbibfile}: {e}")
         else:
@@ -1370,17 +1398,21 @@ def main(
 
     # Replace IDs in text based on id_changes
     if id_changes:
+        if args.verbose:
+            print ("ID changes",  id_changes)
         text = replace_ids_in_text(text, id_changes)
 
     text = readheader(text)[1]
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
 
     # Save bibliography for the current manuscript
+    '''
     print('\nSaving bibliography for this file here:', localbibpath)
     outbib = bibtexparser.dumps(local_db)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)
+    '''
 
     new_bib_content = serialize_bib_database(full_bibdat)
     # Save new global bibliography 

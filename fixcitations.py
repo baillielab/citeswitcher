@@ -181,10 +181,8 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
         if args.verbose:
             print("Merged two entries in a bib database under this ID:\n {}".format(existing_entry['ID']))
     else:
-        entry = cleanbib(entry) 
+        #entry = cleanbib(entry) # commented out because \_ underscore escape is annoying
         bibdat.entries.append(entry)
-        if args.verbose:
-            print("Adding new entry to a bib database:\n {}".format(entry['ID']))
     bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
     if additional_dicts:
         for id_dict, id_field in additional_dicts:
@@ -198,6 +196,7 @@ def cite(theseids):
     Ensures that entries in cited_bibdat are identical to those in full_bibdat (global bibliography).
     If an entry is not found in full_bibdat, it attempts to find and add it via online search.
     """
+    global full_bibdat, cited_bibdat
     if args.verbose:
         print("cite function has been asked to handle:\n", theseids)
     fails = []
@@ -287,7 +286,7 @@ def merge_bibdat_duplicates(bib_database1, bib_database2=BibDatabase()):
             duplicate_found = False
             for e_id, e in entries_ordered.items():
                 if (doi and e.get('doi') == doi) or (pmid and e.get('pmid') == pmid):
-                    print (f"Duplicate found: {e_id}")
+                    print (f"Duplicate found: {entry_id} will be merged into {e_id}")
                     merged_entry = merge_entries(e, entry)
                     entries_ordered[e_id] = merged_entry
                     if entry_id != e_id:
@@ -296,24 +295,11 @@ def merge_bibdat_duplicates(bib_database1, bib_database2=BibDatabase()):
                     break
             if not duplicate_found:
                 entries_ordered[entry_id] = entry
+    print (entries_ordered['eqtlgen2021'])
     merged_bib_database = BibDatabase()
-    merged_bib_database.entries = list(entries_ordered.values())
-    return merged_bib_database, id_changes
-
-def handle_duplicates_in_bib(bibdat):
-    """
-    Handle duplicates within a bib database by merging entries that have the same ID, DOI, or PMID.
-    Returns the updated bibdat and a mapping of old IDs to new IDs.
-    """
-    merged_bib_database, id_changes = merge_bibdat_duplicates(bibdat)
-    return merged_bib_database, id_changes
-
-def merge_local_and_global_bib(local_bib_database, global_bib_database):
-    """
-    Merge local bib entries into the global bib database, merging duplicates by ID, DOI, and PMID.
-    Returns the combined bib database and a mapping of old IDs to new IDs.
-    """
-    merged_bib_database, id_changes = merge_bibdat_duplicates(global_bib_database, local_bib_database)
+    for entry in list(entries_ordered.values()):
+        add_entry_to_bibdatabase(entry, merged_bib_database)
+    print (merged_bib_database.entries_dict['eqtlgen2021'])
     return merged_bib_database, id_changes
 
 def parse_bib_contents(bibfilecontents):
@@ -353,8 +339,11 @@ def read_bib_files(localbibfile, globalbibfile=None):
     else:
         print("File does not exist: {}".format(localbibfile))
         original_contents = ""
-
-    local_bib_database, id_changes_local = handle_duplicates_in_bib(local_bib_database)
+    
+    print (local_bib_database.entries_dict['eqtlgen2021'])
+    local_bib_database, id_changes_local = merge_bibdat_duplicates(local_bib_database)
+    local_bib_database.entries = local_bib_database.entries
+    print (local_bib_database.entries_dict['eqtlgen2021'])
 
     # Read and parse the global bib file
     global_bib_database = BibDatabase()
@@ -375,7 +364,7 @@ def read_bib_files(localbibfile, globalbibfile=None):
         else:
             print("Bib file empty: {}".format(globalbibfile))
             original_contents = ""
-        combined_bib_database, id_changes_global = merge_local_and_global_bib(local_bib_database, global_bib_database)
+        combined_bib_database, id_changes_global = merge_bibdat_duplicates(local_bib_database, global_bib_database)
     elif globalbibfile:
         print("File does not exist: {}".format(globalbibfile))
         original_contents = ""
@@ -383,6 +372,8 @@ def read_bib_files(localbibfile, globalbibfile=None):
         combined_bib_database = local_bib_database
         id_changes_global = {}
     print ("\n")
+
+    print (combined_bib_database.entries_dict['eqtlgen2021'])
 
     id_changes = {**id_changes_local, **id_changes_global}
     return combined_bib_database, original_contents, id_changes
@@ -1288,13 +1279,13 @@ def main(
 
     if args.verbose:
         print(f"Number of entries before duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
-    cited_bibdat, id_changes_cited = handle_duplicates_in_bib(cited_bibdat)
+    cited_bibdat, id_changes_cited = merge_bibdat_duplicates(cited_bibdat)
     if args.verbose:
         print(f"Number of entries after duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
     
     if args.verbose:
         print(f"Number of entries before duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
-    full_bibdat, id_changes_full = handle_duplicates_in_bib(full_bibdat)
+    full_bibdat, id_changes_full = merge_bibdat_duplicates(full_bibdat)
     if args.verbose:
         print(f"Number of entries after duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
     

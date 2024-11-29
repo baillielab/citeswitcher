@@ -380,42 +380,6 @@ def read_bib_files(localbibfile, globalbibfile=None):
 
     return combined_bib_database, original_contents, id_changes
 
-def read_bib_files_old(localbibfile, globalbibfile=None):
-    bfs = ""
-    original_contents = ""
-    bibfiles = [localbibfile]
-    if globalbibfile:
-        bibfiles.append(globalbibfile)
-    for bibfile in bibfiles:
-        if os.path.exists(bibfile):
-            size = os.path.getsize(bibfile)
-            if size > 0:
-                try:
-                    with open(bibfile, encoding="utf-8") as bf:
-                        content = bf.read()
-                except UnicodeDecodeError:
-                    with open(bibfile, encoding="latin1") as bf:
-                        content = bf.read()
-            else:
-                print("Bib file empty: {}".format(bibfile))
-                content = ""
-        else:
-            print("File does not exist: {}".format(bibfile))
-            continue  # Skip to the next file
-        bfs += content
-        if globalbibfile and bibfile == globalbibfile:
-            original_contents += content
-    try:
-        bib_database = bibtexparser.bparser.BibTexParser(
-            common_strings=True,
-            homogenize_fields=True,
-            interpolate_strings=False
-        ).parse(bfs, partial=False)
-        return bib_database, original_contents
-    except Exception as e:
-        print(f"Error parsing BibTeX files: {e}")
-        return BibDatabase(), original_contents
-
 def serialize_bib_database(bib_database):
     writer = BibTexWriter()
     writer.order_entries_by = None  # Keep the order of entries

@@ -143,7 +143,7 @@ def make_alt_dicts():
                 pass
             thisdict[entry[thislabel]] = entry
 
-def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=[(dois, 'doi'), (pmids, 'pmid')]):
+def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
     '''
     Adds a new entry to the given BibDatabase object, checking for duplicates based on ID, DOI, and PMID.
     Merges entries if a duplicate is found, giving precedence to existing data.
@@ -174,16 +174,18 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=[(dois, 'doi'), (pm
                         existing_entry = id_dict[id_value]
                         break  # Found existing entry by DOI or PMID
     if existing_entry:
-        # Merge the new entry into the existing one
-        # Existing data takes precedence
-        existing_entry = merge_entries(existing_entry, entry)
-    else:
-        # No existing entry found, add the new entry
-        entry = cleanbib(entry) 
+        #existing_entry = merge_entries(existing_entry, entry)
+        merged_entry = merge_entries(existing_entry, entry)
+        index = bibdat.entries.index(existing_entry)
+        bibdat.entries[index] = merged_entry
         if args.verbose:
-            print("Adding new entry to bib databases:\n {}".format(entry['ID']))
+            print("Merged two entries in a bib database under this ID:\n {}".format(existing_entry['ID']))
+    else:
+        entry = cleanbib(entry) 
         bibdat.entries.append(entry)
-        bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
+        if args.verbose:
+            print("Adding new entry to a bib database:\n {}".format(entry['ID']))
+    bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
     if additional_dicts:
         for id_dict, id_field in additional_dicts:
             if id_field in entry:
@@ -197,7 +199,7 @@ def cite(theseids):
     If an entry is not found in full_bibdat, it attempts to find and add it via online search.
     """
     if args.verbose:
-        print("cite function has been asked to find:\n", theseids)
+        print("cite function has been asked to handle:\n", theseids)
     fails = []
     for thisid in theseids:
         # Ensure the citation ID is in lowercase if force_lowercase_citations is True
@@ -205,11 +207,13 @@ def cite(theseids):
             thisid = thisid.lower()
         # Check if the entry is already in local_db
         if thisid in local_db.entries_dict:
+            if args.verbose:
+                print("\t\tfound", thisid, "in local_db")
             continue  # Entry is already in local bibliography
         # Check if the entry exists in full_bibdat
         try:
             full_bibdat.entries_dict[thisid]
-            add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], local_db, additional_dicts=None)
+            print("\t\tfound", thisid, "in full_bibdat")
         except:
             # Entry not found in full_bibdat, attempt to find it online
             print("ID not found in current bibtex files:", thisid)
@@ -222,10 +226,17 @@ def cite(theseids):
                 # Unable to find the entry
                 print("Cite function unable to find entry for ID:", thisid)
                 fails.append(thisid)
+            continue
+        add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], local_db, additional_dicts=None)
     return fails
 
 def cleanbib(bibtex_entry):
-    return {d:string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
+    def safe_string_to_latex(value):
+        if value is None:
+            return ''  # or return None, depending on your needs
+        return string_to_latex(str(value))  # Convert to string first
+    
+    return {d: safe_string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
 
 def getconfig(cfgfile="null"):
     if cfgfile=="null":
@@ -341,13 +352,15 @@ def read_bib_files(localbibfile, globalbibfile=None):
                 print(f"Error parsing BibTeX file {localbibfile}: {e}")
         else:
             print("Bib file empty: {}".format(localbibfile))
-            content = ""
+            original_contents = ""
     else:
         print("File does not exist: {}".format(localbibfile))
-        content = ""
+        original_contents = ""
 
-    # Handle duplicates within the local bib file
+    print(f"Number of entries before duplicate removal: {len(local_bib_database.entries)}")
     local_bib_database, id_changes_local = handle_duplicates_in_bib(local_bib_database)
+    print(f"Number of entries after duplicate removal: {len(local_bib_database.entries)}")
+
 
     # Read and parse the global bib file
     global_bib_database = BibDatabase()
@@ -367,17 +380,17 @@ def read_bib_files(localbibfile, globalbibfile=None):
                 print(f"Error parsing BibTeX file {globalbibfile}: {e}")
         else:
             print("Bib file empty: {}".format(globalbibfile))
-            content = ""
+            original_contents = ""
+        combined_bib_database, id_changes_global = merge_local_and_global_bib(local_bib_database, global_bib_database)
     elif globalbibfile:
         print("File does not exist: {}".format(globalbibfile))
-        content = ""
+        original_contents = ""
+    else:
+        combined_bib_database = local_bib_database
+        id_changes_global = {}
+    print ("\n")
 
-    # Merge local and global bib databases
-    combined_bib_database, id_changes_global = merge_local_and_global_bib(local_bib_database, global_bib_database)
-
-    # Combine ID changes
     id_changes = {**id_changes_local, **id_changes_global}
-
     return combined_bib_database, original_contents, id_changes
 
 def serialize_bib_database(bib_database):
@@ -387,18 +400,6 @@ def serialize_bib_database(bib_database):
 
 def hash_content(content):
     return hashlib.md5(content.encode('utf-8')).hexdigest()
-
-def sort_db(thisdb, sortby="year"):
-    sorter = {}
-    for this_entry in thisdb.entries:
-        s = this_entry[sortby]
-        try:
-            s = int(s)
-        except:
-            pass
-        sorter[this_entry['ID']] = s
-    theseids = [key for key, value in sorted(iter(sorter.items()), key=lambda k_v: (k_v[1],k_v[0]), reverse=True)]
-    thisdb.entries = [thisdb.entries_dict[thisid] for thisid in theseids]
 
 def findreplace(inputtext, frdict):
     for f in frdict:
@@ -1272,6 +1273,7 @@ def main(
     else:
         globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
         full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath, globalbibfile)
+    full_bibdat.entries = full_bibdat.entries  # Force cache update
 
     # Force lowercase citations if required
     if force_lowercase_citations:
@@ -1292,6 +1294,10 @@ def main(
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations, report_text=id_change_report)
 
     # Save bibliography for the current manuscript
+    print(f"Number of entries before duplicate removal: {len(local_db.entries)}")
+    local_db, id_changes_final = handle_duplicates_in_bib(local_db)
+    print(f"Number of entries after duplicate removal: {len(local_db.entries)}")
+
     bibdir, bibfilename = os.path.split(localbibpath)
     bibstem = '.'.join(bibfilename.split('.')[:-1])
     localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")

@@ -130,18 +130,13 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
 
     if entry is None:
         return  # Nothing to add
-
-    # Ensure the entry has an ENTRYTYPE
-    if 'ENTRYTYPE' not in entry:
+    if 'ENTRYTYPE' not in entry: # Ensure the entry has an ENTRYTYPE
         entry['ENTRYTYPE'] = 'article'
 
     existing_entry = None
-
-    # First, try to find an existing entry by ID
-    if entry['ID'] in bibdat.entries_dict:
+    if entry['ID'] in bibdat.entries_dict: # First, try to find an existing entry by ID
         existing_entry = bibdat.entries_dict[entry['ID']]
-    else:
-        # If not found by ID, try to find by DOI or PMID
+    else: # If not found by ID, try to find by DOI or PMID
         if additional_dicts:
             for id_dict, id_field in additional_dicts:
                 if id_field in entry:
@@ -149,7 +144,6 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
                     if id_value in id_dict:
                         existing_entry = id_dict[id_value]
                         break  # Found existing entry by DOI or PMID
-
     if existing_entry:
         # Merge the new entry into the existing one
         # Existing data takes precedence
@@ -161,7 +155,7 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
         # No existing entry found, add the new entry
         # Clean the entry if necessary (e.g., convert to LaTeX encoding)
         # entry = cleanbib(entry)  # Uncomment if you have a cleanbib function
-        print("Adding new entry to bibdat:\n {}".format(entry['ID']))
+        print("Adding new entry to bib databases:\n {}".format(entry['ID']))
         bibdat.entries.append(entry)
         # Invalidate the entries_dict cache
         #bibdat._entries_dict = None
@@ -173,7 +167,6 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
             if id_field in entry:
                 id_value = entry[id_field]
                 id_dict[id_value] = entry
-
 
 def cite(theseids):
     """
@@ -197,7 +190,7 @@ def cite(theseids):
             add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], local_db, additional_dicts=None)
         except:
             # Entry not found in full_bibdat, attempt to find it online
-            print("ID not found in global bibtex file:", thisid)
+            print("ID not found in current bibtex files:", thisid)
             # Optionally attempt to find the entry online
             new_entry = findcitation(thisid, 'id')
             if new_entry:
@@ -342,8 +335,6 @@ def handle_duplicates_in_bib(bibdat):
     entries_by_pmid = {}
     new_entries = []
     id_changes = {}  # Mapping of old IDs to new IDs
-
-    print ("about to loop through all of these:", bibdat.entries)
 
     for entry in bibdat.entries:
         entry_id = entry['ID']
@@ -921,7 +912,7 @@ def id2pmid(theseids, notpmidlist=[]):
         elif 'pmid' in full_bibdat.entries_dict[thisid]:
             pmidlist.append(full_bibdat.entries_dict[thisid]['pmid'])
         else:
-            print ("pmid not found in bib file: {}. Searching online...".format(thisid))
+            print ("PMID not found in bib file: {}. Searching online...".format(thisid))
             try:
                 new_entry = findcitation(full_bibdat.entries_dict[thisid]['doi'], 'doi')
             except:
@@ -1033,15 +1024,15 @@ def replace_ids_in_text(text, id_changes):
                 # Use word boundaries to match whole IDs only
                 citation_block = re.sub(r'\b' + re.escape(old_id) + r'\b', new_id, citation_block)
         if citation_block != original_block:
-            print(f"Replaced IDs in citation block: {original_block} --> {citation_block}")
+            if args.verbose:
+                print(f"Replaced IDs in citation block: {original_block} --> {citation_block}")
         return citation_block
 
     # Apply the replacement function to all citation blocks in the text
     updated_text = re.sub(combined_pattern, replace_ids_in_match, text)
     return updated_text
 
-
-def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
+def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, id_changes={}):
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext) # pmid first as they are the most likely to have errors
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
@@ -1076,11 +1067,17 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
+    reverse_id_changes = {new_id: old_id for old_id, new_id in id_changes.items()}
     for b in replacedict:
-        if replacedict[b] == 'null':
-            print ("{:>80} ... left alone".format(b))
-            continue
-        print ("{:>80} ==> {}".format(b, replacedict[b]))
+        if b in reverse_id_changes:
+            bout = reverse_id_changes[b]
+            print(f"{b} is the replacement for {old_id}")
+        else:
+            bout = b
+            if replacedict[b] == 'null':
+                print ("{:>80} ... left alone".format(b))
+                continue
+        print ("{:>80} ==> {}".format(bout, replacedict[b]))
         thistext = thistext.replace(b, replacedict[b])
     return thistext
 
@@ -1315,7 +1312,7 @@ def main(
     yaml_file,
     wholereference,
     outputstyle,
-    overwrite,
+    no_overwrite,
     localbibonly,
     force_lowercase_citations,
     verbose
@@ -1356,7 +1353,7 @@ def main(
     elif filepath.endswith(".tex"):
         if outputstyle == 'null':
             outputstyle = 'tex'
-    if overwrite:
+    if not no_overwrite:
         print("Overwriting original file")
         citelabel = "."
     elif outputstyle in ('pubmed', 'pmid'):
@@ -1403,16 +1400,14 @@ def main(
         text = replace_ids_in_text(text, id_changes)
 
     text = readheader(text)[1]
-    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
+    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations, id_changes=id_changes)
 
     # Save bibliography for the current manuscript
-    '''
     print('\nSaving bibliography for this file here:', localbibpath)
     outbib = bibtexparser.dumps(local_db)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)
-    '''
 
     new_bib_content = serialize_bib_database(full_bibdat)
     # Save new global bibliography 
@@ -1434,7 +1429,6 @@ def main(
         file.write(text + "\n\n")
         print("Outputfile:", outputfile)
 
-
 if __name__ == "__main__":
     config = getconfig()
     parser = argparse.ArgumentParser()
@@ -1446,7 +1440,7 @@ if __name__ == "__main__":
     # Other options
     parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='Try to match whole references.')
     parser.add_argument('-o', '--outputstyle', type=str, choices=['md', '.qmd', 'markdown', 'tex', 'latex', 'pubmed', 'pmid', 'inline'], default='null', help='Output references format')
-    parser.add_argument('-ow', '--overwrite', action="store_true", default=False, help='Overwrite input file with new version')
+    parser.add_argument('-no', '--no_overwrite', action="store_true", default=False, help='Overwrite input file with new version')
     parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='Use only local BibTeX file')
     parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False, help='Force all citation references into lowercase')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='Verbose output')
@@ -1459,7 +1453,7 @@ if __name__ == "__main__":
         yaml_file=args.yaml,
         wholereference=args.wholereference,
         outputstyle=args.outputstyle,
-        overwrite=args.overwrite,
+        no_overwrite=args.no_overwrite,
         localbibonly=args.localbibonly,
         force_lowercase_citations=args.force_lowercase_citations,
         verbose=args.verbose

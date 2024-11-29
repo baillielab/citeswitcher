@@ -143,7 +143,7 @@ def make_alt_dicts():
                 pass
             thisdict[entry[thislabel]] = entry
 
-def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
+def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=[(dois, 'doi'), (pmids, 'pmid')]):
     '''
     Adds a new entry to the given BibDatabase object, checking for duplicates based on ID, DOI, and PMID.
     Merges entries if a duplicate is found, giving precedence to existing data.
@@ -162,7 +162,6 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
         return  # Nothing to add
     if 'ENTRYTYPE' not in entry: # Ensure the entry has an ENTRYTYPE
         entry['ENTRYTYPE'] = 'article'
-
     existing_entry = None
     if entry['ID'] in bibdat.entries_dict: # First, try to find an existing entry by ID
         existing_entry = bibdat.entries_dict[entry['ID']]
@@ -177,22 +176,14 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
     if existing_entry:
         # Merge the new entry into the existing one
         # Existing data takes precedence
-        for key, value in entry.items():
-            if key not in existing_entry or not existing_entry[key]:
-                existing_entry[key] = value
-        # No need to add to entries list or entries_dict, as existing_entry is already in bibdat
+        existing_entry = merge_entries(existing_entry, entry)
     else:
         # No existing entry found, add the new entry
-        # Clean the entry if necessary (e.g., convert to LaTeX encoding)
-        # entry = cleanbib(entry)  # Uncomment if you have a cleanbib function
+        entry = cleanbib(entry) 
         if args.verbose:
             print("Adding new entry to bib databases:\n {}".format(entry['ID']))
         bibdat.entries.append(entry)
-        # Invalidate the entries_dict cache
-        #bibdat._entries_dict = None
         bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
-
-    # Update the additional identifier dictionaries
     if additional_dicts:
         for id_dict, id_field in additional_dicts:
             if id_field in entry:
@@ -261,11 +252,11 @@ def getconfig(cfgfile="null"):
         sys.exit()
     return data
 
-
 def merge_entries(entry1, entry2):
     """
     Merge two BibTeX entries, giving precedence to the first entry's data.
     Returns the merged entry.
+    entry1 takes precedence
     """
     merged_entry = entry1.copy()
     for key, value in entry2.items():
@@ -273,130 +264,49 @@ def merge_entries(entry1, entry2):
             merged_entry[key] = value
     return merged_entry
 
-def merge_local_and_global_bib(local_bib_database, global_bib_database):
-    """
-    Merge local bib entries into the global bib database, merging duplicates by ID, DOI, and PMID.
-    Returns the combined bib database and a mapping of old IDs to new IDs.
-    """
-    combined_entries_by_id = {entry['ID']: entry for entry in global_bib_database.entries}
-    entries_by_doi = {entry.get('doi'): entry for entry in global_bib_database.entries if 'doi' in entry}
-    entries_by_pmid = {entry.get('pmid'): entry for entry in global_bib_database.entries if 'pmid' in entry}
-    id_changes = {}  # Mapping of old IDs to new IDs
-
-    for entry in local_bib_database.entries:
+def merge_bibdat_duplicates(bib_database1, bib_database2=BibDatabase()):
+    entries_ordered = OrderedDict()
+    id_changes = {}
+    for entry in bib_database1.entries + bib_database2.entries:
         entry_id = entry['ID']
         doi = entry.get('doi')
         pmid = entry.get('pmid')
-
-        existing_entry = None
-        merge_needed = False
-
-        # Check for duplicate by ID
-        if entry_id in combined_entries_by_id:
-            existing_entry = combined_entries_by_id[entry_id]
-            merge_needed = True
-        # Check for duplicate by DOI
-        elif doi and doi in entries_by_doi:
-            existing_entry = entries_by_doi[doi]
-            merge_needed = True
-            id_changes[entry_id] = existing_entry['ID']
-        # Check for duplicate by PMID
-        elif pmid and pmid in entries_by_pmid:
-            existing_entry = entries_by_pmid[pmid]
-            merge_needed = True
-            id_changes[entry_id] = existing_entry['ID']
-
-        if merge_needed:
-            # Merge entries
-            merged_entry = merge_entries(existing_entry, entry)
-            # Update combined entries
-            combined_entries_by_id[merged_entry['ID']] = merged_entry
-            if 'doi' in merged_entry:
-                entries_by_doi[merged_entry['doi']] = merged_entry
-            if 'pmid' in merged_entry:
-                entries_by_pmid[merged_entry['pmid']] = merged_entry
-            if args.verbose:
-                print(f"Merged local entry into global for ID: {merged_entry['ID']}")
-        else:
-            # No duplicate, add to combined entries
-            combined_entries_by_id[entry_id] = entry
-            if doi:
-                entries_by_doi[doi] = entry
-            if pmid:
-                entries_by_pmid[pmid] = entry
-
-    # Create combined bib database
-    combined_bib_database = BibDatabase()
-    combined_bib_database.entries = list(combined_entries_by_id.values())
-    #combined_bib_database._entries_dict = None  # Invalidate cache
-    combined_bib_database.entries = combined_bib_database.entries
-    return combined_bib_database, id_changes
+        existing_entry = entries_ordered.get(entry_id)
+        if existing_entry: # Duplicate by ID
+            merged_entry = merge_entries(existing_entry, entry) # existing_entry takes precedence
+            entries_ordered[entry_id] = merged_entry
+        else: # Check for duplicate by DOI or PMID
+            duplicate_found = False
+            for e_id, e in entries_ordered.items():
+                if (doi and e.get('doi') == doi) or (pmid and e.get('pmid') == pmid):
+                    print (f"Duplicate found: {e_id}")
+                    merged_entry = merge_entries(e, entry)
+                    entries_ordered[e_id] = merged_entry
+                    if entry_id != e_id:
+                        id_changes[entry_id] = e_id
+                    duplicate_found = True
+                    break
+            if not duplicate_found:
+                entries_ordered[entry_id] = entry
+    merged_bib_database = BibDatabase()
+    merged_bib_database.entries = list(entries_ordered.values())
+    return merged_bib_database, id_changes
 
 def handle_duplicates_in_bib(bibdat):
     """
     Handle duplicates within a bib database by merging entries that have the same ID, DOI, or PMID.
     Returns the updated bibdat and a mapping of old IDs to new IDs.
     """
-    entries_by_id = {}
-    entries_by_doi = {}
-    entries_by_pmid = {}
-    new_entries = []
-    id_changes = {}  # Mapping of old IDs to new IDs
+    merged_bib_database, id_changes = merge_bibdat_duplicates(bibdat)
+    return merged_bib_database, id_changes
 
-    for entry in bibdat.entries:
-        entry_id = entry['ID']
-        doi = entry.get('doi')
-        pmid = entry.get('pmid')
-
-        existing_entry = None
-        merge_needed = False
-
-        # Check for duplicate by ID
-        if entry_id in entries_by_id:
-            existing_entry = entries_by_id[entry_id]
-            merge_needed = True
-            print(f"Found duplicate by ID: {entry_id}. Contents will be merged.")
-        # Check for duplicate by DOI
-        elif doi and doi in entries_by_doi:
-            existing_entry = entries_by_doi[doi]
-            merge_needed = True
-            if entry_id != existing_entry['ID']:
-                id_changes[entry_id] = existing_entry['ID']
-                print(f"Found duplicate by DOI. {entry_id} will be replaced with: {existing_entry['ID']} by merging contents")
-        # Check for duplicate by PMID
-        elif pmid and pmid in entries_by_pmid:
-            existing_entry = entries_by_pmid[pmid]
-            merge_needed = True
-            if entry_id != existing_entry['ID']:
-                id_changes[entry_id] = existing_entry['ID']
-                print(f"Found duplicate by PMID. {entry_id} will be replaced with: {existing_entry['ID']} by merging contents")
-
-        if merge_needed:
-            # Merge entries
-            merged_entry = merge_entries(existing_entry, entry)
-            # Update entries by ID, DOI, PMID
-            entries_by_id[merged_entry['ID']] = merged_entry
-            if 'doi' in merged_entry:
-                entries_by_doi[merged_entry['doi']] = merged_entry
-            if 'pmid' in merged_entry:
-                entries_by_pmid[merged_entry['pmid']] = merged_entry
-            # Replace existing entry in new_entries
-            index = new_entries.index(existing_entry)
-            new_entries[index] = merged_entry
-        else:
-            # No duplicate, add to entries
-            entries_by_id[entry_id] = entry
-            if doi:
-                entries_by_doi[doi] = entry
-            if pmid:
-                entries_by_pmid[pmid] = entry
-            new_entries.append(entry)
-
-    # Update bibdat entries
-    bibdat.entries = new_entries
-    bibdat.entries = bibdat.entries
-    #bibdat._entries_dict = None  # Invalidate cache
-    return bibdat, id_changes
+def merge_local_and_global_bib(local_bib_database, global_bib_database):
+    """
+    Merge local bib entries into the global bib database, merging duplicates by ID, DOI, and PMID.
+    Returns the combined bib database and a mapping of old IDs to new IDs.
+    """
+    merged_bib_database, id_changes = merge_bibdat_duplicates(global_bib_database, local_bib_database)
+    return merged_bib_database, id_changes
 
 def parse_bib_contents(bibfilecontents):
     try:
@@ -778,14 +688,15 @@ def parse_citation_block(thisblock, force_lowercase=False):
         results['ids'] = [x.lower() for x in results['ids']]
     return results
 
-def casereplace(thistext, catchall, cleanversion):
-    '''
-    replace <catchall> text with <cleanversion> if it occurs at the beginning of the text
-    '''
-    catchall = re.compile("^"+re.escape(catchall.strip()), re.IGNORECASE)
-    return catchall.sub(cleanversion, thistext)
-
 def clean_id(thisid):
+
+    def casereplace(thistext, catchall, cleanversion):
+        '''
+        replace <catchall> text with <cleanversion> if it occurs at the beginning of the text
+        '''
+        catchall = re.compile("^"+re.escape(catchall.strip()), re.IGNORECASE)
+        return catchall.sub(cleanversion, thistext)
+
     thisid = thisid.replace(" ","").strip()
     for stem in pubmedsearchstrings:
         thisid = casereplace(thisid, stem, 'PMID:')
@@ -1365,26 +1276,24 @@ def main(
     elif filepath.endswith(".tex"):
         if outputstyle == 'null':
             outputstyle = 'tex'
-    if not no_overwrite:
-        print("Overwriting original file")
-        citelabel = "."
-    elif outputstyle in ('pubmed', 'pmid'):
-        print("Outputstyle = pmid")
-        citelabel = ".citepmid."
-    elif outputstyle in ('markdown', 'md'):
-        print("Outputstyle = md")
-        citelabel = ".citemd."
-    elif outputstyle in ('latex', 'tex'):
-        print("Outputstyle = tex")
-        citelabel = ".citetex."
-    elif outputstyle == 'inline':
-        print("Outputstyle = inline")
-        citelabel = "."
+    if no_overwrite:
+        if outputstyle in ('pubmed', 'pmid'):
+            print("Outputstyle = pmid")
+            citelabel = ".citepmid."
+        elif outputstyle in ('markdown', 'md'):
+            print("Outputstyle = md")
+            citelabel = ".citemd."
+        elif outputstyle in ('latex', 'tex'):
+            print("Outputstyle = tex")
+            citelabel = ".citetex."
+        elif outputstyle == 'inline':
+            print("Outputstyle = inline")
+            citelabel = "."
     else:
+        print("Overwriting original file")
         citelabel = "."
 
     # BIB - read them all and copy into one local version
-    globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
     if 'bibliography' in workingyaml.keys():
         print('Using YAML-specified bib:', workingyaml['bibliography'])
     else:
@@ -1394,7 +1303,11 @@ def main(
     original_bib_content = None
 
     # Read bib files and get ID changes
-    full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath, globalbibfile)
+    if localbibonly:
+        full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath)
+    else:
+        globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
+        full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath, globalbibfile)
 
     # Force lowercase citations if required
     if force_lowercase_citations:

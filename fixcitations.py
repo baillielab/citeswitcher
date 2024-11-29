@@ -82,8 +82,8 @@ additionaldicts = []
 def init():
     global full_bibdat
     full_bibdat = BibDatabase()
-    global local_db # cited
-    local_db = BibDatabase()
+    global cited_bibdat # cited
+    cited_bibdat = BibDatabase()
     global pmids
     pmids = {}
     global dois
@@ -194,8 +194,8 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
 
 def cite(theseids):
     """
-    Adds the specified citation IDs to the local bibliography database (local_db).
-    Ensures that entries in local_db are identical to those in full_bibdat (global bibliography).
+    Adds the specified citation IDs to the local bibliography database (cited_bibdat).
+    Ensures that entries in cited_bibdat are identical to those in full_bibdat (global bibliography).
     If an entry is not found in full_bibdat, it attempts to find and add it via online search.
     """
     if args.verbose:
@@ -205,29 +205,26 @@ def cite(theseids):
         # Ensure the citation ID is in lowercase if force_lowercase_citations is True
         if args.force_lowercase_citations:
             thisid = thisid.lower()
-        # Check if the entry is already in local_db
-        if thisid in local_db.entries_dict:
+        # Check if the entry is already in cited_bibdat
+        if thisid in cited_bibdat.entries_dict:
             if args.verbose:
-                print("\t\tfound", thisid, "in local_db")
+                print("\t\tfound", thisid, "in cited_bibdat")
             continue  # Entry is already in local bibliography
         # Check if the entry exists in full_bibdat
         try:
             full_bibdat.entries_dict[thisid]
-            print("\t\tfound", thisid, "in full_bibdat")
+            if args.verbose:
+                print("\t\tfound", thisid, "in full_bibdat")
         except:
-            # Entry not found in full_bibdat, attempt to find it online
-            print("ID not found in current bibtex files:", thisid)
-            # Optionally attempt to find the entry online
             new_entry = findcitation(thisid, 'id')
             if new_entry:
                 add_entry_to_bibdatabase(new_entry, full_bibdat, additional_dicts=additionaldicts)
-                add_entry_to_bibdatabase(new_entry, local_db, additional_dicts=None)
+                add_entry_to_bibdatabase(new_entry, cited_bibdat, additional_dicts=None)
             else:
-                # Unable to find the entry
                 print("Cite function unable to find entry for ID:", thisid)
                 fails.append(thisid)
             continue
-        add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], local_db, additional_dicts=None)
+        add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], cited_bibdat, additional_dicts=None)
     return fails
 
 def cleanbib(bibtex_entry):
@@ -357,10 +354,7 @@ def read_bib_files(localbibfile, globalbibfile=None):
         print("File does not exist: {}".format(localbibfile))
         original_contents = ""
 
-    print(f"Number of entries before duplicate removal: {len(local_bib_database.entries)}")
     local_bib_database, id_changes_local = handle_duplicates_in_bib(local_bib_database)
-    print(f"Number of entries after duplicate removal: {len(local_bib_database.entries)}")
-
 
     # Read and parse the global bib file
     global_bib_database = BibDatabase()
@@ -830,17 +824,17 @@ def pmid2id(thesepmids, others):
     return outids, missing_ids
 
 def format_inline(thisid):
-    au = local_db.entries_dict[thisid]['Author'].split(" and ")
+    au = cited_bibdat.entries_dict[thisid]['Author'].split(" and ")
     if len(au)>1:
         au = au[0] + " et al"
     else:
         au = au[0]
     formatted_citation = "{}. {} {};{}:{}".format(
         au,
-        local_db.entries_dict[thisid]['Journal'].capitalize(),
-        local_db.entries_dict[thisid]['Year'],
-        local_db.entries_dict[thisid]['Volume'],
-        local_db.entries_dict[thisid]['Pages'],
+        cited_bibdat.entries_dict[thisid]['Journal'].capitalize(),
+        cited_bibdat.entries_dict[thisid]['Year'],
+        cited_bibdat.entries_dict[thisid]['Volume'],
+        cited_bibdat.entries_dict[thisid]['Pages'],
         )
     return formatted_citation
 
@@ -921,7 +915,7 @@ def replace_ids_in_text(text, id_changes):
     
     return updated_text, report
 
-def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, report_text=""):
+def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext) # pmid first as they are the most likely to have errors
     l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
@@ -956,9 +950,6 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False, repor
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
-    if len(report_text)>0:
-        print ("\n ID changes in the following citations:")
-        print (report_text)
     if len(replacedict)>0:
         print ("\n Citations replaced in text:")
     for b in replacedict:
@@ -1205,7 +1196,7 @@ def main(
     force_lowercase_citations,
     verbose
 ):
-    global full_bibdat, local_db
+    global full_bibdat, cited_bibdat
     # Determine source path and filenames
     sourcepath, filename = os.path.split(filepath)
     outpath = os.path.join(sourcepath)
@@ -1279,30 +1270,47 @@ def main(
     if force_lowercase_citations:
         print("Forcing lowercase citations")
         full_bibdat = id_to_lower(full_bibdat)
-        local_db = id_to_lower(local_db)
+        cited_bibdat = id_to_lower(cited_bibdat)
 
     # Rebuild additional dictionaries
     make_alt_dicts()
 
     # Replace IDs in text based on id_changes
     if id_changes:
-        if args.verbose:
-            print ("ID changes",  id_changes)
         text, id_change_report = replace_ids_in_text(text, id_changes)
 
-    text = readheader(text)[1]
-    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations, report_text=id_change_report)
+    if len(id_change_report)>0:
+        print ("\n ID changes in the following citations:")
+        print (id_change_report)
 
-    # Save bibliography for the current manuscript
-    print(f"Number of entries before duplicate removal: {len(local_db.entries)}")
-    local_db, id_changes_final = handle_duplicates_in_bib(local_db)
-    print(f"Number of entries after duplicate removal: {len(local_db.entries)}")
+    text = readheader(text)[1]
+    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
+
+    if args.verbose:
+        print(f"Number of entries before duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
+    cited_bibdat, id_changes_cited = handle_duplicates_in_bib(cited_bibdat)
+    if args.verbose:
+        print(f"Number of entries after duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
+    
+    if args.verbose:
+        print(f"Number of entries before duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
+    full_bibdat, id_changes_full = handle_duplicates_in_bib(full_bibdat)
+    if args.verbose:
+        print(f"Number of entries after duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
+    
+    if len(id_changes_cited)>0:
+        for item in id_changes_cited:
+            print ("Additional id change: {}  ==> {}".format(item, id_changes_cited[item]))
+    if args.verbose:
+        if len(id_changes_full)>0:
+            for item in id_changes_full:
+                print ("Additional id change: {}  ==> {}".format(item, id_changes_full[item]))
 
     bibdir, bibfilename = os.path.split(localbibpath)
     bibstem = '.'.join(bibfilename.split('.')[:-1])
     localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")
     print('\nSaving bibliography for this file here:', localbibpath)
-    outbib = bibtexparser.dumps(local_db)
+    outbib = bibtexparser.dumps(cited_bibdat)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)

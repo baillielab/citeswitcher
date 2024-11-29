@@ -39,7 +39,7 @@ import json
 import subprocess
 #-------------------
 speedup_store = fixcitations.default_global_bibfile.replace('.bib','.json')
-bibdat, _ = fixcitations.read_bib_files(bibfile)
+bibdat, _, _ = fixcitations.read_bib_files(bibfile)
 #-------------------
 if os.path.exists(speedup_store):
     with open(speedup_store) as f:
@@ -67,7 +67,7 @@ for thisentry in bibdat.entries:
             #print ("No doi: {}".format(thisentry['ID']))
             continue
         try:
-            thisentry['pmid'] = already[thisentry['doi']]
+            already[thisentry['doi']]
         except:
             # only search if this hasn't already been done
             pub = fixcitations.search_pubmed(thisentry['doi'], "doi")
@@ -77,7 +77,7 @@ for thisentry in bibdat.entries:
                 e+=1
                 already[thisentry['doi']] = pmid
             else:
-                already[thisentry['doi']] = 'failed'
+                already[thisentry['doi']] = 'not_found'
                 print ("failed {} {} {}".format(thisentry['ID'], thisentry['doi'], pub))
 print ("\nPMIDs already:{}, DOIs:{}, PMIDs found:{}".format(c,d,e))
 #-----------------

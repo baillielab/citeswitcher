@@ -1235,7 +1235,7 @@ def main(
     yaml_file,
     wholereference,
     outputstyle,
-    no_overwrite,
+    safemode,
     localbibonly,
     force_lowercase_citations,
     verbose
@@ -1276,7 +1276,7 @@ def main(
     elif filepath.endswith(".tex"):
         if outputstyle == 'null':
             outputstyle = 'tex'
-    if no_overwrite:
+    if safemode:
         if outputstyle in ('pubmed', 'pmid'):
             print("Outputstyle = pmid")
             citelabel = ".citepmid."
@@ -1341,11 +1341,11 @@ def main(
     # Save new global bibliography 
     if original_bib_content is not None:
         if hash_content(original_bib_content) != hash_content(new_bib_content):
-            print('\nSaving global bibliography here:', globalbibfile)
-            os.makedirs(os.path.dirname(globalbibfile), exist_ok=True)
-            with open(globalbibfile, "w", encoding="utf-8") as bf:
-                bf.write(new_bib_content)
-            print("Global bibliography updated.")
+            if not args.safemode:
+                print('\nSaving updated global bibliography here:', globalbibfile)
+                os.makedirs(os.path.dirname(globalbibfile), exist_ok=True)
+                with open(globalbibfile, "w", encoding="utf-8") as bf:
+                    bf.write(new_bib_content)
         else:
             print("Global bibliography unchanged. Skipping write.")
 
@@ -1368,7 +1368,7 @@ if __name__ == "__main__":
     # Other options
     parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='Try to match whole references.')
     parser.add_argument('-o', '--outputstyle', type=str, choices=['md', '.qmd', 'markdown', 'tex', 'latex', 'pubmed', 'pmid', 'inline'], default='null', help='Output references format')
-    parser.add_argument('-no', '--no_overwrite', action="store_true", default=False, help='Overwrite input file with new version')
+    parser.add_argument('-s', '--safemode', action="store_true", default=False, help='Overwrite input file with new version')
     parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='Use only local BibTeX file')
     parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False, help='Force all citation references into lowercase')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='Verbose output')
@@ -1381,7 +1381,7 @@ if __name__ == "__main__":
         yaml_file=args.yaml,
         wholereference=args.wholereference,
         outputstyle=args.outputstyle,
-        no_overwrite=args.no_overwrite,
+        safemode=args.safemode,
         localbibonly=args.localbibonly,
         force_lowercase_citations=args.force_lowercase_citations,
         verbose=args.verbose

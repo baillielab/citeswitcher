@@ -83,6 +83,10 @@ class BibData:
         self.dois_dict = {}      # Keyed by DOI for quick access
 
     def add_entry(self, entry):
+        # Ensure the entry has an 'ENTRYTYPE', default to 'article'
+        if 'ENTRYTYPE' not in entry or not entry['ENTRYTYPE']:
+            entry['ENTRYTYPE'] = 'article'
+
         entry_id = entry['ID']
         existing_entry = self.entries_dict.get(entry_id)
         if existing_entry:
@@ -122,6 +126,10 @@ class BibData:
             old_id = entry['ID']
             new_id = old_id.lower()
             entry['ID'] = new_id
+            # Ensure 'ENTRYTYPE' is present
+            if 'ENTRYTYPE' not in entry or not entry['ENTRYTYPE']:
+                entry['ENTRYTYPE'] = 'article'
+
             new_entries.append(entry)
             new_entries_dict[new_id] = entry
 
@@ -255,13 +263,12 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
 
     Returns:
     - merged_bib_data: A new BibData instance containing merged entries.
-    - id_changes: A dictionary mapping old IDs to new IDs if changes occurred.
+    - id_changes: A dictionary mapping old IDs: new IDs if changes occurred.
     """
+    global id_changes
+    entries_ordered = OrderedDict()
     if bib_data2 is None:
         bib_data2 = BibData()
-
-    entries_ordered = OrderedDict()
-    id_changes = {}
 
     # Combine entries from both BibData instances
     combined_entries = bib_data1.get_entries() + bib_data2.get_entries()
@@ -287,22 +294,16 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
                     merged_entry = bib_data1.merge_entries(e, entry)
                     entries_ordered[e_id] = merged_entry
                     if entry_id != e_id:
-                        id_changes[entry_id] = e_id
+                        id_changes[e_id] = entry_id # old:new
                     duplicate_found = True
                     break
             if not duplicate_found:
                 entries_ordered[entry_id] = entry
 
-    # Create a new BibData instance with merged entries
     merged_bib_data = BibData()
     for entry in entries_ordered.values():
         merged_bib_data.add_entry(entry)
-
-    # Optional debug statements
-    print(entries_ordered.get('eqtlgen2021'))
-    print(merged_bib_data.get_entry_by_id('eqtlgen2021'))
-
-    return merged_bib_data, id_changes
+    return merged_bib_data
 
 def parse_bib_contents(bibfilecontents):
     try:
@@ -339,6 +340,10 @@ def read_bib_file(bibfilepath):
     else:
         print("File does not exist: {}".format(bibfilepath))
         original_contents = ""
+    # Force lowercase citations if required
+    if args.force_lowercase_citations:
+        print("Forcing lowercase citations")
+        bibdata.id_to_lower()
     return bibdata, original_contents
 
 def serialize_bib_database(bib_database):
@@ -738,12 +743,8 @@ def id2pmid(theseids, notpmidlist=[]):
                 doi = entry.get('doi')
                 title = entry.get('title') or entry.get('Title')
                 if doi:
-                    if args.verbose:
-                        print(f"Searching PubMed for DOI: {doi}")
                     new_entry = findcitation(doi, 'doi', force_search=True)
                 elif title:
-                    if args.verbose:
-                        print(f"Searching PubMed for Title: {title}")
                     new_entry = findcitation(title, 'title', force_search=True)
                 if new_entry and (new_entry.get('pmid') or new_entry.get('PMID')):
                     pmid = new_entry.get('pmid') or new_entry.get('PMID')
@@ -841,7 +842,7 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
             blockstring += "[***{}]".format(', '.join(thesemissing))
     return blockstring
 
-def replace_ids_in_text(text, id_changes):
+def replace_ids_in_text(text):
     """
     Replace occurrences of old IDs with new IDs in the text, using the global regex patterns.
     Returns both the updated text and a report of changes made.
@@ -849,6 +850,7 @@ def replace_ids_in_text(text, id_changes):
     Returns:
         tuple: (updated_text, report) where report is a string describing all changes made
     """
+    global id_changes
     patterns = [
         markdown_citations,
         latexbrackets
@@ -1153,9 +1155,11 @@ def main(
     force_lowercase_citations,
     verbose
 ):
-    global full_bibdat, cited_bibdat
+    global full_bibdat, cited_bibdat, id_changes
     full_bibdat = BibData()
     cited_bibdat = BibData()
+    id_changes = OrderedDict() # ensure id changes are applied in series so that chains are followed
+
     # Determine source path and filenames
     sourcepath, filename = os.path.split(filepath)
     outpath = os.path.join(sourcepath)
@@ -1220,23 +1224,15 @@ def main(
     # Read bib files and get ID changes
     if localbibonly:
         full_bibdat, _ = read_bib_file(localbibpath)
-        full_bibdat, id_changes = merge_bibdat_duplicates(full_bibdat)
+        full_bibdat = merge_bibdat_duplicates(full_bibdat)
     else:
         local_bibdat, _ = read_bib_file(localbibpath)
         globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
         full_bibdat, original_fullbib_content = read_bib_file(globalbibfile)
-        full_bibdat, id_changes = merge_bibdat_duplicates(full_bibdat, local_bibdat)
+        full_bibdat = merge_bibdat_duplicates(full_bibdat, local_bibdat)
 
-    # Force lowercase citations if required
-    if force_lowercase_citations:
-        print("Forcing lowercase citations")
-        full_bibdat.id_to_lower()
-        cited_bibdat.id_to_lower()
-
-    # Replace IDs in text based on id_changes
-    if id_changes:
-        text, id_change_report = replace_ids_in_text(text, id_changes)
-
+    print(full_bibdat.get_entry_by_id('hirschenberger2023'))
+    text, id_change_report = replace_ids_in_text(text)
     if len(id_change_report)>0:
         print ("\n ID changes in the following citations:")
         print (id_change_report)
@@ -1246,24 +1242,16 @@ def main(
 
     if args.verbose:
         print(f"Number of entries before duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
-    cited_bibdat, id_changes_cited = merge_bibdat_duplicates(cited_bibdat)
+    cited_bibdat = merge_bibdat_duplicates(cited_bibdat)
     if args.verbose:
         print(f"Number of entries after duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
     
     if args.verbose:
         print(f"Number of entries before duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
-    full_bibdat, id_changes_full = merge_bibdat_duplicates(full_bibdat)
+    full_bibdat = merge_bibdat_duplicates(full_bibdat)
     if args.verbose:
         print(f"Number of entries after duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
     
-    if len(id_changes_cited)>0:
-        for item in id_changes_cited:
-            print ("Additional id change: {}  ==> {}".format(item, id_changes_cited[item]))
-    if args.verbose:
-        if len(id_changes_full)>0:
-            for item in id_changes_full:
-                print ("Additional id change: {}  ==> {}".format(item, id_changes_full[item]))
-
     bibdir, bibfilename = os.path.split(localbibpath)
     bibstem = '.'.join(bibfilename.split('.')[:-1])
     localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")

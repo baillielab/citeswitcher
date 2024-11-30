@@ -250,8 +250,8 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
     Returns a new BibData instance and a dictionary of ID changes.
 
     Parameters:
-    - bib_data1: The primary BibData instance.
-    - bib_data2: The secondary BibData instance to merge with bib_data1. This one takes precedence.
+    - bib_data1: The primary BibData instance.  This one takes precedence.
+    - bib_data2: The secondary BibData instance to merge with bib_data1.
 
     Returns:
     - merged_bib_data: A new BibData instance containing merged entries.
@@ -647,7 +647,7 @@ def findcitation(info, infotype='pmid', additionalinfo='', force_search=False):
     """
     Searches for a citation in full_bibdat or online.
     """
-    global no_user_response_count
+    global no_user_response_count, full_bibdat
     info = info.strip()
     if infotype == 'pmid':
         if not force_search:
@@ -722,6 +722,7 @@ def id2pmid(theseids, notpmidlist=[]):
     """
     Converts a list of IDs to PMIDs.
     """
+    global full_bibdat
     pmidlist = []
     for thisid in theseids:
         # Try to find this ID in full_bibdat
@@ -759,6 +760,7 @@ def pmid2id(thesepmids, others):
     """
     Converts a list of PMIDs to IDs.
     """
+    global full_bibdat
     outids = []
     missing_ids = others
     for pmid in thesepmids:
@@ -777,8 +779,8 @@ def pmid2id(thesepmids, others):
                 missing_ids.append(pmid)
     return outids, missing_ids
 
-
 def format_inline(thisid):
+    global cited_bibdat
     au = cited_bibdat.entries_dict[thisid]['Author'].split(" and ")
     if len(au)>1:
         au = au[0] + " et al"
@@ -1152,6 +1154,8 @@ def main(
     verbose
 ):
     global full_bibdat, cited_bibdat
+    full_bibdat = BibData()
+    cited_bibdat = BibData()
     # Determine source path and filenames
     sourcepath, filename = os.path.split(filepath)
     outpath = os.path.join(sourcepath)
@@ -1216,12 +1220,12 @@ def main(
     # Read bib files and get ID changes
     if localbibonly:
         full_bibdat, _ = read_bib_file(localbibpath)
+        full_bibdat, id_changes = merge_bibdat_duplicates(full_bibdat)
     else:
         local_bibdat, _ = read_bib_file(localbibpath)
         globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
         full_bibdat, original_fullbib_content = read_bib_file(globalbibfile)
-
-    full_bibdat, id_changes = merge_bibdat_duplicates(local_bibdat, full_bibdat)
+        full_bibdat, id_changes = merge_bibdat_duplicates(full_bibdat, local_bibdat)
 
     # Force lowercase citations if required
     if force_lowercase_citations:

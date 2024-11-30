@@ -28,8 +28,6 @@ import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
-from bibtexparser.latexenc import latex_to_unicode
-from bibtexparser.latexenc import string_to_latex
 
 # patch for yaml error in pythonista on ipad
 import collections
@@ -181,7 +179,6 @@ def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
         if args.verbose:
             print("Merged two entries in a bib database under this ID:\n {}".format(existing_entry['ID']))
     else:
-        #entry = cleanbib(entry) # commented out because \_ underscore escape is annoying
         bibdat.entries.append(entry)
     bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
     if additional_dicts:
@@ -225,14 +222,6 @@ def cite(theseids):
             continue
         add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], cited_bibdat, additional_dicts=None)
     return fails
-
-def cleanbib(bibtex_entry):
-    def safe_string_to_latex(value):
-        if value is None:
-            return ''  # or return None, depending on your needs
-        return string_to_latex(str(value))  # Convert to string first
-    
-    return {d: safe_string_to_latex(bibtex_entry[d]) for d in bibtex_entry.keys()}
 
 def getconfig(cfgfile="null"):
     if cfgfile=="null":

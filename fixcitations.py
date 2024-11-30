@@ -27,7 +27,6 @@ sys.path.append(os.path.join(scriptpath, 'dependencies/python-bibtexparser-maste
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
-from bibtexparser.bibdatabase import BibDatabase
 
 # patch for yaml error in pythonista on ipad
 import collections
@@ -76,19 +75,82 @@ doisearchstrings = [
         ]
 no_user_response_count = 0
 
-additionaldicts = []
-def init():
-    global full_bibdat
-    full_bibdat = BibDatabase()
-    global cited_bibdat # cited
-    cited_bibdat = BibDatabase()
-    global pmids
-    pmids = {}
-    global dois
-    dois = {}
-    additionaldicts.append((pmids, "pmid"))
-    additionaldicts.append((dois, "doi"))
-init()
+class BibData:
+    def __init__(self):
+        self.entries = []
+        self.entries_dict = {}   # Keyed by ID for quick access
+        self.pmids_dict = {}     # Keyed by PMID for quick access
+        self.dois_dict = {}      # Keyed by DOI for quick access
+
+    def add_entry(self, entry):
+        entry_id = entry['ID']
+        existing_entry = self.entries_dict.get(entry_id)
+        if existing_entry:
+            # Merge entries if duplicate IDs are found
+            merged_entry = self.merge_entries(existing_entry, entry)
+            index = self.entries.index(existing_entry)
+            self.entries[index] = merged_entry
+            self.entries_dict[entry_id] = merged_entry
+        else:
+            self.entries.append(entry)
+            self.entries_dict[entry_id] = entry
+
+        # Index the entry by PMID
+        pmid = entry.get('pmid') or entry.get('PMID')
+        if pmid:
+            self.pmids_dict[pmid] = entry
+
+        # Index the entry by DOI
+        doi = entry.get('doi')
+        if doi:
+            self.dois_dict[doi] = entry
+
+    def merge_entries(self, entry1, entry2):
+        # Merge two entries, giving precedence to entry1
+        merged_entry = entry1.copy()
+        for key, value in entry2.items():
+            if key not in merged_entry or not merged_entry[key]:
+                merged_entry[key] = value
+        return merged_entry
+
+    def id_to_lower(self):
+        new_entries = []
+        new_entries_dict = {}
+        new_pmids_dict = {}
+        new_dois_dict = {}
+        for entry in self.entries:
+            old_id = entry['ID']
+            new_id = old_id.lower()
+            entry['ID'] = new_id
+            new_entries.append(entry)
+            new_entries_dict[new_id] = entry
+
+            # Update PMID index
+            pmid = entry.get('pmid') or entry.get('PMID')
+            if pmid:
+                new_pmids_dict[pmid] = entry
+
+            # Update DOI index
+            doi = entry.get('doi')
+            if doi:
+                new_dois_dict[doi] = entry
+
+        self.entries = new_entries
+        self.entries_dict = new_entries_dict
+        self.pmids_dict = new_pmids_dict
+        self.dois_dict = new_dois_dict
+
+    def get_entry_by_id(self, entry_id):
+        return self.entries_dict.get(entry_id)
+
+    def get_entry_by_pmid(self, pmid):
+        return self.pmids_dict.get(pmid)
+
+    def get_entry_by_doi(self, doi):
+        return self.dois_dict.get(doi)
+
+    def get_entries(self):
+        return self.entries
 
 class cd:
     """Context manager for changing the current working directory"""
@@ -119,110 +181,6 @@ def check_dir(this_dir):
         os.mkdir(this_dir)
     fix_permissions(this_dir)
 
-def id_to_lower(bibdat):
-    for entry in bibdat.entries:
-        entry["ID"] = entry["ID"].lower()
-    #bibdat._entries_dict = None
-    bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
-    return bibdat
-
-def make_alt_dicts():
-    for entry in full_bibdat.entries:
-        for thisdict, thislabel in additionaldicts:
-            try:
-                entry[thislabel]
-            except:
-                continue
-            try:
-                thisdict[entry[thislabel]]
-                if args.verbose:
-                    print("duplicate {} in biblatex database:{}".format(thislabel, entry[thislabel]))
-            except:
-                pass
-            thisdict[entry[thislabel]] = entry
-
-def add_entry_to_bibdatabase(entry, bibdat, additional_dicts=None):
-    '''
-    Adds a new entry to the given BibDatabase object, checking for duplicates based on ID, DOI, and PMID.
-    Merges entries if a duplicate is found, giving precedence to existing data.
-
-    Parameters:
-    - entry: The new BibTeX entry as a dictionary.
-    - bibdat: The BibDatabase object to which the entry should be added.
-    - additional_dicts: A list of tuples containing dictionaries for additional identifiers (e.g., DOI, PMID)
-      and their corresponding field names in entries. Example: [(dois_dict, 'doi'), (pmids_dict, 'pmid')]
-
-    Returns:
-    - None. The function modifies bibdat in place.
-    '''
-
-    if entry is None:
-        return  # Nothing to add
-    if 'ENTRYTYPE' not in entry: # Ensure the entry has an ENTRYTYPE
-        entry['ENTRYTYPE'] = 'article'
-    existing_entry = None
-    if entry['ID'] in bibdat.entries_dict: # First, try to find an existing entry by ID
-        existing_entry = bibdat.entries_dict[entry['ID']]
-    else: # If not found by ID, try to find by DOI or PMID
-        if additional_dicts:
-            for id_dict, id_field in additional_dicts:
-                if id_field in entry:
-                    id_value = entry[id_field]
-                    if id_value in id_dict:
-                        existing_entry = id_dict[id_value]
-                        break  # Found existing entry by DOI or PMID
-    if existing_entry:
-        #existing_entry = merge_entries(existing_entry, entry)
-        merged_entry = merge_entries(existing_entry, entry)
-        index = bibdat.entries.index(existing_entry)
-        bibdat.entries[index] = merged_entry
-        if args.verbose:
-            print("Merged two entries in a bib database under this ID:\n {}".format(existing_entry['ID']))
-    else:
-        bibdat.entries.append(entry)
-    bibdat.entries = bibdat.entries  # Reassign entries to itself to force cache update
-    if additional_dicts:
-        for id_dict, id_field in additional_dicts:
-            if id_field in entry:
-                id_value = entry[id_field]
-                id_dict[id_value] = entry
-
-def cite(theseids):
-    """
-    Adds the specified citation IDs to the local bibliography database (cited_bibdat).
-    Ensures that entries in cited_bibdat are identical to those in full_bibdat (global bibliography).
-    If an entry is not found in full_bibdat, it attempts to find and add it via online search.
-    """
-    global full_bibdat, cited_bibdat
-    if args.verbose:
-        print("cite function has been asked to handle:\n", theseids)
-    fails = []
-    for thisid in theseids:
-        # Ensure the citation ID is in lowercase if force_lowercase_citations is True
-        if args.force_lowercase_citations:
-            thisid = thisid.lower()
-        # Check if the entry is already in cited_bibdat
-        if thisid in cited_bibdat.entries_dict:
-            if args.verbose:
-                print("\t\tfound", thisid, "in cited_bibdat")
-            continue  # Entry is already in local bibliography
-        # Check if the entry exists in full_bibdat
-        try:
-            full_bibdat.entries_dict[thisid]
-            if args.verbose:
-                print("\t\tfound", thisid, "in full_bibdat")
-        except:
-            new_entry = findcitation(thisid, 'id')
-            if new_entry:
-                add_entry_to_bibdatabase(new_entry, full_bibdat, additional_dicts=additionaldicts)
-                add_entry_to_bibdatabase(new_entry, cited_bibdat, additional_dicts=None)
-            else:
-                print("Cite function unable to find entry for ID:", thisid)
-                fails.append(thisid)
-            continue
-        add_entry_to_bibdatabase(full_bibdat.entries_dict[thisid], cited_bibdat, additional_dicts=None)
-    return fails
-
 def getconfig(cfgfile="null"):
     if cfgfile=="null":
         for cfgname in ['config_local.json', "config.json"]:
@@ -248,35 +206,85 @@ def getconfig(cfgfile="null"):
         sys.exit()
     return data
 
-def merge_entries(entry1, entry2):
+def cite(theseids):
     """
-    Merge two BibTeX entries, giving precedence to the first entry's data.
-    Returns the merged entry.
-    entry1 takes precedence
+    Adds the specified citation IDs to the local bibliography database (cited_bibdat).
+    Ensures that entries in cited_bibdat are identical to those in full_bibdat (global bibliography).
+    If an entry is not found in full_bibdat, it attempts to find and add it via online search.
     """
-    merged_entry = entry1.copy()
-    for key, value in entry2.items():
-        if key not in merged_entry or not merged_entry[key]:
-            merged_entry[key] = value
-    return merged_entry
+    global full_bibdat, cited_bibdat
+    if args.verbose:
+        print("cite function has been asked to handle:\n", theseids)
+    fails = []
+    for thisid in theseids:
+        # Ensure the citation ID is in lowercase if force_lowercase_citations is True
+        if args.force_lowercase_citations:
+            thisid = thisid.lower()
+        # Check if the entry is already in cited_bibdat
+        if cited_bibdat.get_entry_by_id(thisid):
+            if args.verbose:
+                print("\t\tfound", thisid, "in cited_bibdat")
+            continue  # Entry is already in local bibliography
+        # Check if the entry exists in full_bibdat
+        entry = full_bibdat.get_entry_by_id(thisid)
+        if entry:
+            if args.verbose:
+                print("\t\tfound", thisid, "in full_bibdat")
+            # Add entry to cited_bibdat
+            cited_bibdat.add_entry(entry)
+        else:
+            # Attempt to find the citation online
+            new_entry = findcitation(thisid, 'id')
+            if new_entry:
+                # Add new entry to both full_bibdat and cited_bibdat
+                full_bibdat.add_entry(new_entry)
+                cited_bibdat.add_entry(new_entry)
+            else:
+                print("Cite function unable to find entry for ID:", thisid)
+                fails.append(thisid)
+    return fails
 
-def merge_bibdat_duplicates(bib_database1, bib_database2=BibDatabase()):
+def merge_bibdat_duplicates(bib_data1, bib_data2=None):
+    """
+    Merges two BibData instances, handling duplicates based on IDs, DOIs, and PMIDs.
+    Returns a new BibData instance and a dictionary of ID changes.
+
+    Parameters:
+    - bib_data1: The primary BibData instance.
+    - bib_data2: The secondary BibData instance to merge with bib_data1. This one takes precedence.
+
+    Returns:
+    - merged_bib_data: A new BibData instance containing merged entries.
+    - id_changes: A dictionary mapping old IDs to new IDs if changes occurred.
+    """
+    if bib_data2 is None:
+        bib_data2 = BibData()
+
     entries_ordered = OrderedDict()
     id_changes = {}
-    for entry in bib_database1.entries + bib_database2.entries:
+
+    # Combine entries from both BibData instances
+    combined_entries = bib_data1.get_entries() + bib_data2.get_entries()
+
+    for entry in combined_entries:
         entry_id = entry['ID']
         doi = entry.get('doi')
-        pmid = entry.get('pmid')
+        pmid = entry.get('pmid') or entry.get('PMID')
         existing_entry = entries_ordered.get(entry_id)
-        if existing_entry: # Duplicate by ID
-            merged_entry = merge_entries(existing_entry, entry) # existing_entry takes precedence
+
+        if existing_entry:
+            # Duplicate found by ID
+            merged_entry = bib_data1.merge_entries(existing_entry, entry)
             entries_ordered[entry_id] = merged_entry
-        else: # Check for duplicate by DOI or PMID
+        else:
+            # Check for duplicate by DOI or PMID
             duplicate_found = False
             for e_id, e in entries_ordered.items():
-                if (doi and e.get('doi') == doi) or (pmid and e.get('pmid') == pmid):
-                    print (f"Duplicate found: {entry_id} will be merged into {e_id}")
-                    merged_entry = merge_entries(e, entry)
+                e_doi = e.get('doi')
+                e_pmid = e.get('pmid') or e.get('PMID')
+                if (doi and e_doi == doi) or (pmid and e_pmid == pmid):
+                    print(f"Duplicate found: {entry_id} will be merged into {e_id}")
+                    merged_entry = bib_data1.merge_entries(e, entry)
                     entries_ordered[e_id] = merged_entry
                     if entry_id != e_id:
                         id_changes[entry_id] = e_id
@@ -284,88 +292,54 @@ def merge_bibdat_duplicates(bib_database1, bib_database2=BibDatabase()):
                     break
             if not duplicate_found:
                 entries_ordered[entry_id] = entry
-    print (entries_ordered['eqtlgen2021'])
-    merged_bib_database = BibDatabase()
-    for entry in list(entries_ordered.values()):
-        add_entry_to_bibdatabase(entry, merged_bib_database)
-    print (merged_bib_database.entries_dict['eqtlgen2021'])
-    return merged_bib_database, id_changes
+
+    # Create a new BibData instance with merged entries
+    merged_bib_data = BibData()
+    for entry in entries_ordered.values():
+        merged_bib_data.add_entry(entry)
+
+    # Optional debug statements
+    print(entries_ordered.get('eqtlgen2021'))
+    print(merged_bib_data.get_entry_by_id('eqtlgen2021'))
+
+    return merged_bib_data, id_changes
 
 def parse_bib_contents(bibfilecontents):
     try:
-        bib_database = bibtexparser.bparser.BibTexParser(
-            common_strings=True,
-            homogenize_fields=True,
-            interpolate_strings=False
-        ).parse(bibfilecontents, partial=False)
-        return bib_database
+        parser = BibTexParser(common_strings=True)
+        bib_database = parser.parse(bibfilecontents)
+        bib_data = BibData()
+        for entry in bib_database.entries:
+            bib_data.add_entry(entry)
+        return bib_data
     except Exception as e:
         print(f"Error parsing parse_bib_contents: {e}")
-        return BibDatabase()
+        return BibData()
 
-def read_bib_files(localbibfile, globalbibfile=None):
+def read_bib_file(bibfilepath):
     original_contents = ""
-    # Read and parse the local bib file
-    parser = BibTexParser(common_strings=True)
-    local_bib_database = BibDatabase()
-    if os.path.exists(localbibfile):
-        size = os.path.getsize(localbibfile)
+    bibdata = BibData()
+    if os.path.exists(bibfilepath):
+        size = os.path.getsize(bibfilepath)
         if size > 0:
             try:
-                with open(localbibfile, encoding="utf-8") as bf:
+                with open(bibfilepath, encoding="utf-8") as bf:
                     content = bf.read()
             except UnicodeDecodeError:
-                with open(localbibfile, encoding="latin1") as bf:
+                with open(bibfilepath, encoding="latin1") as bf:
                     content = bf.read()
-            local_bib_database = parse_bib_contents(content)
+            original_contents = copy.copy(content)
             try:
-                local_bib_database = parse_bib_contents(content)
+                bibdata = parse_bib_contents(content)
             except Exception as e:
-                print(f"Error parsing BibTeX file {localbibfile}: {e}")
+                print(f"Error parsing BibTeX file {bibfilepath}: {e}")
         else:
-            print("Bib file empty: {}".format(localbibfile))
+            print("Bib file empty: {}".format(bibfilepath))
             original_contents = ""
     else:
-        print("File does not exist: {}".format(localbibfile))
+        print("File does not exist: {}".format(bibfilepath))
         original_contents = ""
-    
-    print (local_bib_database.entries_dict['eqtlgen2021'])
-    local_bib_database, id_changes_local = merge_bibdat_duplicates(local_bib_database)
-    local_bib_database.entries = local_bib_database.entries
-    print (local_bib_database.entries_dict['eqtlgen2021'])
-
-    # Read and parse the global bib file
-    global_bib_database = BibDatabase()
-    if globalbibfile and os.path.exists(globalbibfile):
-        size = os.path.getsize(globalbibfile)
-        if size > 0:
-            try:
-                with open(globalbibfile, encoding="utf-8") as bf:
-                    content = bf.read()
-            except UnicodeDecodeError:
-                with open(globalbibfile, encoding="latin1") as bf:
-                    content = bf.read()
-            original_contents = content
-            try:
-                global_bib_database = parse_bib_contents(content)
-            except Exception as e:
-                print(f"Error parsing BibTeX file {globalbibfile}: {e}")
-        else:
-            print("Bib file empty: {}".format(globalbibfile))
-            original_contents = ""
-        combined_bib_database, id_changes_global = merge_bibdat_duplicates(local_bib_database, global_bib_database)
-    elif globalbibfile:
-        print("File does not exist: {}".format(globalbibfile))
-        original_contents = ""
-    else:
-        combined_bib_database = local_bib_database
-        id_changes_global = {}
-    print ("\n")
-
-    print (combined_bib_database.entries_dict['eqtlgen2021'])
-
-    id_changes = {**id_changes_local, **id_changes_global}
-    return combined_bib_database, original_contents, id_changes
+    return bibdata, original_contents
 
 def serialize_bib_database(bib_database):
     writer = BibTexWriter()
@@ -670,138 +644,139 @@ def parse_wholecitation_block(thisblock, force_lowercase=False):
         return outids, []  # there is only ever one
 
 def findcitation(info, infotype='pmid', additionalinfo='', force_search=False):
-    '''
-        search the bibdat first
-        search online in a variety of ways
-        if found, add it to global db
-        return a single bibtex entry
-        or None if not found or in doubt
-    '''
+    """
+    Searches for a citation in full_bibdat or online.
+    """
     global no_user_response_count
-    info = str(info.strip())
+    info = info.strip()
     if infotype == 'pmid':
         if not force_search:
-            try:
-                return pmids[info]
-            except:
-                print ("{} not found in pmids: ".format(info))
-                pass
-        pub = p2b([info])
-        if len(pub) > 0:
-            if pub[0] != 'null' and pub[0] != None:
-                print ("PMID:{} found online".format(info))
-                print (pub[0])
-                add_entry_to_bibdatabase(pub[0], full_bibdat, additional_dicts=additionaldicts)
-                return pub[0]
-        print ("PMID:{} NOT FOUND ON PUBMED".format(info))
+            entry = full_bibdat.get_entry_by_pmid(info)
+            if entry:
+                return entry
+            else:
+                print(f"PMID {info} not found in full_bibdat.")
+        # Search online
+        pub_entries = p2b([info])
+        if pub_entries:
+            new_entry = pub_entries[0]
+            if new_entry:
+                full_bibdat.add_entry(new_entry)
+                return new_entry
+        print(f"PMID {info} not found online.")
         return None
     elif infotype == 'doi':
-        msg=""
         if not force_search:
-            try:
-                return dois[info]
-            except:
-                msg += ("DOI not in bib file: {}".format(info))
-        pub = search_pubmed(info, "doi")
-        if len(pub) == 1:
-            pubent = p2b(pub[0])
-            if len(pubent) > 0:
-                if pubent[0] != 'null' and pubent[0] != None:
-                    print (msg + "but found in pubmed: {}".format(pubent[0]))
-                    add_entry_to_bibdatabase(pubent[0], full_bibdat, additional_dicts=additionaldicts)
-                    return pubent[0]
-        print (msg + ", nor in pubmed")
+            entry = full_bibdat.get_entry_by_doi(info)
+            if entry:
+                return entry
+            else:
+                print(f"DOI {info} not found in full_bibdat.")
+        # Search online
+        pmids = search_pubmed(info, "doi")
+        if pmids:
+            pub_entries = p2b(pmids)
+            if pub_entries:
+                new_entry = pub_entries[0]
+                if new_entry:
+                    full_bibdat.add_entry(new_entry)
+                    return new_entry
+        print(f"DOI {info} not found online.")
         return None
     elif infotype == 'title':
         if no_user_response_count > 2:
-            print ("No user response to previous 3 queries. Running in silent mode.")
+            print("No user response to previous 3 queries. Running in silent mode.")
             return None
-        # should add code to search bibdat for title here ***TODO***
-        print ("searching pubmed for this title:\t{}".format(info))
-        pub = search_pubmed(info, "title")
-        if len(pub) == 1:
-            pmid = pub[0]
-            pubent = p2b(pmid)
-            if len(pubent) > 0:
-                if pubent[0] != 'null' and pubent[0] != None:
-                    question = "--------------\n\
+        print(f"Searching PubMed for title: {info}")
+        pmids = search_pubmed(info, "title")
+        if len(pmids) == 1:
+            pmid = pmids[0]
+            pub_entries = p2b([pmid])
+            if pub_entries:
+                new_entry = pub_entries[0]
+                question = "--------------\n\
 New citation (PMID:{}) found in Pubmed. Please check that input is the same as the found citation for this reference block: \n\
 \n{}\n\n{}\n{}\n\n{}\n\n\
 Enter y/n within 10 seconds".format(
-                        pmid,
-                        additionalinfo,
-                        "{:>12}:    {}".format('Input Title', info),
-                        "{:>12}:    {}".format('Found Title', pubent[0]['Title']),
-                        '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0] if x != "Title"])
-                        )
-                    #q = input (question)
-                    print (question)
-                    i,o,e = select.select([sys.stdin],[],[],10) # 10 second timeout
-                    if i==[] and o==[] and e==[]:
-                        no_user_response_count += 1
-                    if i:
-                        q = sys.stdin.readline().strip()
-                        q = q.strip().upper()
-                        if q == "Y":
-                            print ('--confirmed--')
-                            add_entry_to_bibdatabase(pubent[0], full_bibdat, additional_dicts=additionaldicts)
-                            return pubent[0]
-        return None
-
+                    pmid,
+                    additionalinfo,
+                    "{:>12}:    {}".format('Input Title', info),
+                    "{:>12}:    {}".format('Found Title', pubent[0]['Title']),
+                    '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0] if x != "Title"])
+                    )
+                #q = input (question)
+                print (question)
+                i,o,e = select.select([sys.stdin],[],[],10) # 10 second timeout
+                if i==[] and o==[] and e==[]:
+                    no_user_response_count += 1
+                if i:
+                    q = sys.stdin.readline().strip()
+                    q = q.strip().upper()
+                    if q == "Y":
+                        print ('--confirmed--')
+                        full_bibdat.add_entry(new_entry)
+                        return new_entry
+        print(f"Title {info} not found online.")
 
 def id2pmid(theseids, notpmidlist=[]):
-    '''
-        input is a list of ids
-    '''
+    """
+    Converts a list of IDs to PMIDs.
+    """
     pmidlist = []
     for thisid in theseids:
-        # try to find this id in full_bibdat
-        try:
-            full_bibdat.entries_dict[thisid]
-        except:
-            bestmatchingkey = find_similar_keys(thisid, full_bibdat.entries_dict)
-            print(("id2pmid: bibtex id not found in bibtex files: {}. Best match in database is {}.".format(thisid, bestmatchingkey)))
-            continue
-        # if it is found, try to get the pmid
-        if 'PMID' in full_bibdat.entries_dict[thisid]:
-            pmidlist.append(full_bibdat.entries_dict[thisid]['PMID'])
-        elif 'pmid' in full_bibdat.entries_dict[thisid]:
-            pmidlist.append(full_bibdat.entries_dict[thisid]['pmid'])
-        else:
-            print ("PMID not found in bib file: {}. Searching online...".format(thisid))
-            if 'doi' in full_bibdat.entries_dict[thisid]:
-                if args.verbose: 
-                    print (f"searching pubmed for DOI: {full_bibdat.entries_dict[thisid]['doi']}")
-                new_entry = findcitation(full_bibdat.entries_dict[thisid]['doi'], 'doi', '', force_search=True)
-            elif 'title' in full_bibdat.entries_dict[thisid]:
-                if args.verbose: 
-                    print (f"searching pubmed for Title: {full_bibdat.entries_dict[thisid]['title']}")
-                new_entry = findcitation(full_bibdat.entries_dict[thisid]['title'], 'title', additionalinfo='', force_search=True)
-            if new_entry is None:
-                notpmidlist.append(thisid)
-                continue
-            if 'pmid' in new_entry:
-                pmidlist.append(new_entry['pmid'])
-                pmids[new_entry['pmid']] = new_entry
+        # Try to find this ID in full_bibdat
+        entry = full_bibdat.get_entry_by_id(thisid)
+        if entry:
+            pmid = entry.get('pmid') or entry.get('PMID')
+            if pmid:
+                pmidlist.append(pmid)
             else:
-                notpmidlist.append(thisid)
+                print(f"PMID not found for ID {thisid}. Searching online...")
+                # Attempt to find the entry online using DOI or title
+                new_entry = None
+                doi = entry.get('doi')
+                title = entry.get('title') or entry.get('Title')
+                if doi:
+                    if args.verbose:
+                        print(f"Searching PubMed for DOI: {doi}")
+                    new_entry = findcitation(doi, 'doi', force_search=True)
+                elif title:
+                    if args.verbose:
+                        print(f"Searching PubMed for Title: {title}")
+                    new_entry = findcitation(title, 'title', force_search=True)
+                if new_entry and (new_entry.get('pmid') or new_entry.get('PMID')):
+                    pmid = new_entry.get('pmid') or new_entry.get('PMID')
+                    pmidlist.append(pmid)
+                    full_bibdat.add_entry(new_entry)
+                else:
+                    notpmidlist.append(thisid)
+        else:
+            print(f"ID {thisid} not found in full_bibdat.")
+            notpmidlist.append(thisid)
     return pmidlist, notpmidlist
 
 def pmid2id(thesepmids, others):
+    """
+    Converts a list of PMIDs to IDs.
+    """
     outids = []
     missing_ids = others
     for pmid in thesepmids:
-        try:
-            outids.append(pmids[pmid]['ID'])
-            cite([pmids[pmid]['ID']])
-        except:
+        entry = full_bibdat.get_entry_by_pmid(pmid)
+        if entry:
+            outids.append(entry['ID'])
+            cite([entry['ID']])
+        else:
+            print(f"PMID {pmid} not found. Searching online...")
             new_entry = findcitation(pmid, 'pmid')
-            if new_entry is not None:
+            if new_entry:
                 outids.append(new_entry['ID'])
-                add_entry_to_bibdatabase(new_entry, full_bibdat, additional_dicts=additionaldicts)
+                full_bibdat.add_entry(new_entry)
+                cite([new_entry['ID']])
             else:
                 missing_ids.append(pmid)
     return outids, missing_ids
+
 
 def format_inline(thisid):
     au = cited_bibdat.entries_dict[thisid]['Author'].split(" and ")
@@ -1240,20 +1215,19 @@ def main(
 
     # Read bib files and get ID changes
     if localbibonly:
-        full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath)
+        full_bibdat, _ = read_bib_file(localbibpath)
     else:
+        local_bibdat, _ = read_bib_file(localbibpath)
         globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
-        full_bibdat, original_bib_content, id_changes = read_bib_files(localbibpath, globalbibfile)
-    full_bibdat.entries = full_bibdat.entries  # Force cache update
+        full_bibdat, original_fullbib_content = read_bib_file(globalbibfile)
+
+    full_bibdat, id_changes = merge_bibdat_duplicates(local_bibdat, full_bibdat)
 
     # Force lowercase citations if required
     if force_lowercase_citations:
         print("Forcing lowercase citations")
-        full_bibdat = id_to_lower(full_bibdat)
-        cited_bibdat = id_to_lower(cited_bibdat)
-
-    # Rebuild additional dictionaries
-    make_alt_dicts()
+        full_bibdat.id_to_lower()
+        cited_bibdat.id_to_lower()
 
     # Replace IDs in text based on id_changes
     if id_changes:

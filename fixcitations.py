@@ -270,26 +270,20 @@ def cite(theseids):
         print("cite function has been asked to handle:\n", theseids)
     fails = []
     for thisid in theseids:
-        # Ensure the citation ID is in lowercase if force_lowercase_citations is True
         if args.force_lowercase_citations:
             thisid = thisid.lower()
-        # Check if the entry is already in cited_bibdat
         if cited_bibdat.get_entry_by_id(thisid):
             if args.verbose:
                 print("\t\tfound", thisid, "in cited_bibdat")
             continue  # Entry is already in local bibliography
-        # Check if the entry exists in full_bibdat
         entry = full_bibdat.get_entry_by_id(thisid)
         if entry:
             if args.verbose:
                 print("\t\tfound", thisid, "in full_bibdat")
-            # Add entry to cited_bibdat
             cited_bibdat.add_entry(entry)
         else:
-            # Attempt to find the citation online
             new_entry = findcitation(thisid, 'id')
             if new_entry:
-                # Add new entry to both full_bibdat and cited_bibdat
                 full_bibdat.add_entry(new_entry)
                 cited_bibdat.add_entry(new_entry)
             else:
@@ -331,13 +325,11 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
             # Check for duplicate by DOI or PMID
             duplicate_found = False
             for e_id, e in entries_ordered.items():
-                print ("printing_e", e_id, len(e))
                 e_doi = e.get('doi')
                 e_pmid = e.get('pmid') or e.get('PMID')
                 if (doi and e_doi == doi) or (pmid and e_pmid == pmid):
                     print(f"Duplicate found: {entry_id} will be merged into {e_id}")
                     bib_data1.merge_entries(e, entry)
-                    print ("printing_e 2", e_id, len(e_id))
                     entries_ordered[e_id] = bib_data1.get_entry_by_id(e_id)
                     duplicate_found = True
                     break
@@ -807,14 +799,12 @@ def pmid2id(thesepmids, others):
         entry = full_bibdat.get_entry_by_pmid(pmid)
         if entry:
             outids.append(entry['ID'])
-            cite([entry['ID']])
         else:
             print(f"PMID {pmid} not found. Searching online...")
             new_entry = findcitation(pmid, 'pmid')
             if new_entry:
                 outids.append(new_entry['ID'])
                 full_bibdat.add_entry(new_entry)
-                cite([new_entry['ID']])
             else:
                 missing_ids.append(pmid)
     return outids, missing_ids
@@ -847,7 +837,6 @@ def pmidout(pmidlist, notpmidlist):
                 pmids[x]
             except:
                 continue
-            cite([pmids[x]['ID']])
         blockstring = '[' + ', '.join(["PMID:{}".format(x) for x in pmidlist]) + ']'
         if len(notpmidlist) > 0:
             blockstring += '[*' + ', '.join(notpmidlist) + ']'
@@ -863,8 +852,6 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
         return 'null'
     if flc:
         theseids = [x.lower() for x in theseids]
-    # add to the outputdatabase
-    cite(theseids)
     # make a blockstring
     blockstring = ''
     if outputstyle == "md":
@@ -932,15 +919,18 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib
             theseids = remove_duplicates_preserve_order(theseids+citedhere['ids'])
+            cite(theseids)
             replacedict[b] = mdout(theseids, notfound, outputstyle, flc=flc)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(citedhere['ids'], citedhere['notfound']) # ids added to bib
             pm = remove_duplicates_preserve_order(pm+citedhere['pmids'])
+            cite(citedhere['ids'])
             replacedict[b] = pmidout(pm, notpm)
         else:
             continue
     for b in r:
         theseids, theseothers = parse_wholecitation_block(b, flc)
+        cite(theseids)
         if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
             replacedict[b] = mdout(theseids, theseothers, outputstyle, flc=flc)
         elif outputstyle=='pmid':
@@ -1280,15 +1270,8 @@ def main(
 
     if args.verbose:
         print(f"Number of entries before duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
-    merge_bibdat_duplicates(cited_bibdat)
-    if args.verbose:
+        merge_bibdat_duplicates(cited_bibdat)
         print(f"Number of entries after duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
-    
-    if args.verbose:
-        print(f"Number of entries before duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
-    merge_bibdat_duplicates(full_bibdat)
-    if args.verbose:
-        print(f"Number of entries after duplicate removal (full_bibdat): {len(full_bibdat.entries)}")
     
     bibdir, bibfilename = os.path.split(localbibpath)
     bibstem = '.'.join(bibfilename.split('.')[:-1])

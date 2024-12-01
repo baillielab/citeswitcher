@@ -304,6 +304,8 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
     - merged_bib_data: A new BibData instance containing merged entries.
     - id_changes: A dictionary mapping old IDs: new IDs if changes occurred.
     """
+    print (f"Merging two bib_dats: {len(bib_data1.entries)} and {len(bib_data2.entries)} entries")
+
     entries_ordered = OrderedDict()
     if bib_data2 is None:
         bib_data2 = BibData()
@@ -335,6 +337,7 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
                     break
             if not duplicate_found:
                 entries_ordered[entry_id] = entry
+    print (f"Merged length = {len(bib_data1.entries)} entries")
 
 def parse_bib_contents(bibfilecontents):
     try:
@@ -1247,7 +1250,7 @@ def main(
         workingyaml['bibliography'] = default_localbibname  # HARD OVERWRITE
     localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
     print(f"Using {localbibpath} as bibout")
-    original_bib_content = None
+    original_fullbib_content = None
 
     # Read bib files and get ID changes
     if localbibonly:
@@ -1259,7 +1262,6 @@ def main(
         full_bibdat, original_fullbib_content = read_bib_file(globalbibfile)
         merge_bibdat_duplicates(full_bibdat, local_bibdat)
 
-    print(full_bibdat.get_entry_by_id('hirschenberger2023'))
     text, id_change_report = replace_ids_in_text(text)
     if len(id_change_report)>0:
         print ("\n ID changes in the following citations:")
@@ -1267,12 +1269,10 @@ def main(
 
     text = readheader(text)[1]
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
-
-    if args.verbose:
-        print(f"Number of entries before duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
-        merge_bibdat_duplicates(cited_bibdat)
-        print(f"Number of entries after duplicate removal (cited_bibdat): {len(cited_bibdat.entries)}")
     
+    # save local cs.bib file
+    # keep any uncited items in localbibdat because the user might want them. But remove duplicates. User can handle this manually. 
+    merge_bibdat_duplicates(cited_bibdat, local_bibdat)
     bibdir, bibfilename = os.path.split(localbibpath)
     bibstem = '.'.join(bibfilename.split('.')[:-1])
     localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")
@@ -1282,10 +1282,10 @@ def main(
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)
 
-    new_bib_content = serialize_bib_database(full_bibdat)
     # Save new global bibliography 
-    if original_bib_content is not None:
-        if hash_content(original_bib_content) != hash_content(new_bib_content):
+    new_bib_content = serialize_bib_database(full_bibdat)
+    if original_fullbib_content is not None:
+        if hash_content(original_fullbib_content) != hash_content(new_bib_content):
             if not args.safemode:
                 print('\nSaving updated global bibliography here:', globalbibfile)
                 os.makedirs(os.path.dirname(globalbibfile), exist_ok=True)

@@ -82,6 +82,9 @@ class BibData:
         self.pmids_dict = {}     # Keyed by PMID for quick access
         self.dois_dict = {}      # Keyed by DOI for quick access
         self.id_changes = {}     # Maps old IDs to new IDs
+        self.comments = []       # to prevent bibtexparser warnings
+        self.preambles = []      # to prevent bibtexparser warnings
+        self.strings = {}        # to prevent bibtexparser warnings
 
     def add_entry(self, entry):
         # Ensure the entry has an 'ENTRYTYPE', default to 'article'
@@ -304,11 +307,11 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
     - merged_bib_data: A new BibData instance containing merged entries.
     - id_changes: A dictionary mapping old IDs: new IDs if changes occurred.
     """
-    print (f"Merging two bib_dats: {len(bib_data1.entries)} and {len(bib_data2.entries)} entries")
 
     entries_ordered = OrderedDict()
     if bib_data2 is None:
         bib_data2 = BibData()
+    print (f"Merging two bib_dats: {len(bib_data1.entries)} and {len(bib_data2.entries)} entries")
 
     # Combine entries from both BibData instances
     combined_entries = bib_data1.get_entries() + bib_data2.get_entries()
@@ -330,13 +333,14 @@ def merge_bibdat_duplicates(bib_data1, bib_data2=None):
                 e_doi = e.get('doi')
                 e_pmid = e.get('pmid') or e.get('PMID')
                 if (doi and e_doi == doi) or (pmid and e_pmid == pmid):
-                    print(f"Duplicate found: {entry_id} will be merged into {e_id}")
+                    print(f"Duplicate found: {entry_id} will be merged into {e_id} len(entries_ordered) = {len(entries_ordered)}")
                     bib_data1.merge_entries(e, entry)
                     entries_ordered[e_id] = bib_data1.get_entry_by_id(e_id)
                     duplicate_found = True
                     break
             if not duplicate_found:
                 entries_ordered[entry_id] = entry
+                bib_data1.add_entry(entry) # add all entries to bib_data1
     print (f"Merged length = {len(bib_data1.entries)} entries")
 
 def parse_bib_contents(bibfilecontents):
@@ -740,8 +744,8 @@ Enter y/n within 10 seconds".format(
                     pmid,
                     additionalinfo,
                     "{:>12}:    {}".format('Input Title', info),
-                    "{:>12}:    {}".format('Found Title', pubent[0]['Title']),
-                    '\n'.join( ["{:>12}:    {}".format(x,pubent[0][x]) for x in pubent[0] if x != "Title"])
+                    "{:>12}:    {}".format('Found Title', pub_entries[0]['Title']),
+                    '\n'.join( ["{:>12}:    {}".format(x,pub_entries[0][x]) for x in pub_entries[0] if x != "Title"])
                     )
                 #q = input (question)
                 print (question)
@@ -1254,7 +1258,8 @@ def main(
 
     # Read bib files and get ID changes
     if localbibonly:
-        full_bibdat, _ = read_bib_file(localbibpath)
+        local_bibdat, _ = read_bib_file(localbibpath)
+        full_bibdat = copy.copy(local_bibdat)
         merge_bibdat_duplicates(full_bibdat)
     else:
         local_bibdat, _ = read_bib_file(localbibpath)
@@ -1270,6 +1275,7 @@ def main(
     text = readheader(text)[1]
     text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
     
+
     # save local cs.bib file
     # keep any uncited items in localbibdat because the user might want them. But remove duplicates. User can handle this manually. 
     merge_bibdat_duplicates(cited_bibdat, local_bibdat)

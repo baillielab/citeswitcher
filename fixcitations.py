@@ -99,8 +99,14 @@ class BibData:
         if existing_entry:
             # Merge entries if duplicate IDs are found
             merged_entry, changed_ids = self.merge_entries(existing_entry, entry)
-            index = self.entries.index(existing_entry)
-            self.entries[index] = merged_entry
+            
+            # Find index in entries list by matching IDs
+            index = next((i for i, e in enumerate(self.entries) if e['ID'] == existing_entry['ID']), None)
+            if index is not None:
+                self.entries[index] = merged_entry
+            else:
+                print(f"Warning: existing_entry with ID {existing_entry['ID']} not found in entries. Adding merged_entry to entries.")
+                self.entries.append(merged_entry)
             self.entries_dict[merged_entry['ID']] = merged_entry
 
             # Update id_changes with any new ID changes
@@ -123,6 +129,7 @@ class BibData:
         doi = entry.get('doi')
         if doi:
             self.dois_dict[doi] = entry
+
 
     def merge_entries(self, entry1, entry2):
         """

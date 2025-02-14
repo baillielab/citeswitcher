@@ -1,8 +1,8 @@
 *.pyc
 old/*
-test/*
-config_local.json
+*_local*
 __pycache__*
 .DS_Store
 _development/*
 README_files/*
+_bibfiles/*

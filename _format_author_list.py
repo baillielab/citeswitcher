@@ -57,7 +57,6 @@ symbols = [
     "&para;",
     ] + list(string.ascii_lowercase) + list(string.ascii_uppercase)
 
-nonmatchingfilename = "nonmatching_affiliations.csv"
 alltextfilename = "alltext.md"
 
 def check_affiliation(thisaffiliation):
@@ -178,11 +177,6 @@ if args.fix_affiliations:
         elif a.endswith(".xlsx"):
             inputdfs[i].to_excel(a, index=False)
 
-dn = df[["Name"]+affiliationcols]
-dn = dn.sort_values(by="Name")
-dn = dn.drop_duplicates()
-dn.to_csv(os.path.join(outputdir,nonmatchingfilename))
-
 # MAKE A SINGLE LIST OF CONTRIBUTORS FOR EACH SECTION
 authsecs = [x for x in df["author_section"].dropna().unique() if len(x)>0]
 alltext = ""
@@ -264,7 +258,7 @@ if "contribution" in df.columns:
                 z+=1
                 ini = get_initials(name, z)
             if ini in already:
-                print ("duplicate not resolved! {} {}".format(name, ini))
+                print ("duplicate initials not resolved! {} {}".format(name, ini))
             already.append(ini)
             initials[name] = ini
         cont = {}

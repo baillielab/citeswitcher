@@ -269,26 +269,26 @@ def getconfig(cfgfile="null"):
         sys.exit()
     return data
 
-def cite(theseids):
+def cite(theseids, flc=False):
     """
     Adds the specified citation IDs to the local bibliography database (cited_bibdat).
     Ensures that entries in cited_bibdat are identical to those in full_bibdat (global bibliography).
     If an entry is not found in full_bibdat, it attempts to find and add it via online search.
     """
     global full_bibdat, cited_bibdat
-    if args.verbose:
+    if verbose:
         print("cite function has been asked to handle:\n", theseids)
     fails = []
     for thisid in theseids:
-        if args.force_lowercase_citations:
+        if flc:
             thisid = thisid.lower()
         if cited_bibdat.get_entry_by_id(thisid):
-            if args.verbose:
+            if verbose:
                 print("\t\tfound", thisid, "in cited_bibdat")
             continue  # Entry is already in local bibliography
         entry = full_bibdat.get_entry_by_id(thisid)
         if entry:
-            if args.verbose:
+            if verbose:
                 print("\t\tfound", thisid, "in full_bibdat")
             cited_bibdat.add_entry(entry)
         else:
@@ -362,7 +362,7 @@ def parse_bib_contents(bibfilecontents):
         print(f"Error parsing parse_bib_contents: {e}")
         return BibData()
 
-def read_bib_file(bibfilepath):
+def read_bib_file(bibfilepath, flc=False):
     original_contents = ""
     bibdata = BibData()
     if os.path.exists(bibfilepath):
@@ -385,11 +385,20 @@ def read_bib_file(bibfilepath):
     else:
         print("File does not exist: {}".format(bibfilepath))
         original_contents = ""
-    # Force lowercase citations if required
-    if args.force_lowercase_citations:
+    if flc:
         print("Forcing lowercase citations")
         bibdata.id_to_lower()
     return bibdata, original_contents
+
+def read_bib_files(bibfiles, flc=False):
+    bfs = ""
+    for bibfilepath in bibfiles:
+        bd, oc = read_bib_file(bibfilepath, flc)
+        bfs += oc
+    try:
+        return bibtexparser.bparser.BibTexParser(common_strings=True, homogenize_fields=True, interpolate_strings=False).parse(bfs, partial=False)
+    except:
+        return BibDatabase()
 
 def serialize_bib_database(bib_database):
     writer = BibTexWriter()
@@ -499,7 +508,7 @@ def get_parenthesised(thistext,parentheses=[squarebrackets, commentedsquarebrack
             nested_out.append(item)
     for thislabel in markdown_labels_to_ignore:
         nested_out = [x for x in nested_out if not re.match(thislabel, x[1:])]
-        if args.verbose:
+        if verbose:
             for x in nested_out:
                 if re.match(thislabel, x[1:]):
                     if not x[1:].startswith(thislabel):
@@ -1265,13 +1274,13 @@ def main(
 
     # Read bib files and get ID changes
     if localbibonly:
-        local_bibdat, _ = read_bib_file(localbibpath)
+        local_bibdat, _ = read_bib_file(localbibpath, flc=force_lowercase_citations)
         full_bibdat = copy.copy(local_bibdat)
         merge_bibdat_duplicates(full_bibdat)
     else:
-        local_bibdat, _ = read_bib_file(localbibpath)
+        local_bibdat, _ = read_bib_file(localbibpath, flc=force_lowercase_citations)
         globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
-        full_bibdat, original_fullbib_content = read_bib_file(globalbibfile)
+        full_bibdat, original_fullbib_content = read_bib_file(globalbibfile, flc=force_lowercase_citations)
         merge_bibdat_duplicates(full_bibdat, local_bibdat)
 
     text, id_change_report = replace_ids_in_text(text)
@@ -1332,6 +1341,8 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='Verbose output')
     args = parser.parse_args()
 
+    global verbose
+    verbose = args.verbose
     # Call the main function with parsed arguments
     main(
         filepath=os.path.abspath(os.path.expanduser(args.filepath)),
@@ -1342,7 +1353,7 @@ if __name__ == "__main__":
         safemode=args.safemode,
         localbibonly=args.localbibonly,
         force_lowercase_citations=args.force_lowercase_citations,
-        verbose=args.verbose
+        verbose=verbose
     )
 
 

@@ -9,6 +9,8 @@ import hashlib
 import io
 import json
 import os
+import urllib.parse
+import datetime
 import re
 import requests
 import select
@@ -20,7 +22,6 @@ scriptpath = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(scriptpath, 'dependencies/'))
 import oyaml as yaml
 import Entrez
-import Medline
 import latexchars
 
 sys.path.append(os.path.join(scriptpath, 'dependencies/python-bibtexparser-master/'))
@@ -58,6 +59,9 @@ latexbrackets = r'\\cite\{[\s\S]+?\}'
 pubmedsearchstrings = ["PMID:", "PubMed:"]
 markdown_citations = r'\[@[\s\S]+?\]'
 mdsearchstrings = ["@"]
+urlssearchstrings = [
+            "url:",
+        ]
 doisearchstrings = [
             "doi: https://doi.org/",
             "doi: http://doi.org/",
@@ -81,6 +85,7 @@ class BibData:
         self.entries_dict = {}   # Keyed by ID for quick access
         self.pmids_dict = {}     # Keyed by PMID for quick access
         self.dois_dict = {}      # Keyed by DOI for quick access
+        self.urls_dict = {}      # Keyed by URL for quick access
         self.id_changes = {}     # Maps old IDs to new IDs
         self.comments = []       # to prevent bibtexparser warnings
         self.preambles = []      # to prevent bibtexparser warnings
@@ -130,6 +135,11 @@ class BibData:
         if doi:
             self.dois_dict[doi] = entry
 
+        # Index the entry by URL
+        url = entry.get('url')
+        if url:
+            self.urls_dict[url] = entry
+
 
     def merge_entries(self, entry1, entry2):
         """
@@ -162,6 +172,7 @@ class BibData:
         new_entries_dict = {}
         new_pmids_dict = {}
         new_dois_dict = {}
+        new_urls_dict = {}
         new_id_changes = {}
 
         for entry in self.entries:
@@ -191,10 +202,16 @@ class BibData:
             if doi:
                 new_dois_dict[doi] = entry
 
+            # Update URL index
+            url = entry.get('url')
+            if url:
+                new_urls_dict[url] = entry
+
         self.entries = new_entries
         self.entries_dict = new_entries_dict
         self.pmids_dict = new_pmids_dict
         self.dois_dict = new_dois_dict
+        self.urls_dict = new_urls_dict
         self.id_changes.update(new_id_changes)
 
     def get_entry_by_id(self, entry_id):
@@ -207,6 +224,9 @@ class BibData:
 
     def get_entry_by_doi(self, doi):
         return self.dois_dict.get(doi)
+
+    def get_entry_by_url(self, url):
+        return self.urls_dict.get(url)
 
     def get_entries(self):
         return self.entries
@@ -557,7 +577,7 @@ def get_mixed_citation_blocks(inputtext):
             for crossreflabel in markdown_labels_to_ignore:
                 if remove_parentheses(b).startswith(crossreflabel):
                     continue
-            for stem in pubmedsearchstrings+mdsearchstrings+doisearchstrings:
+            for stem in pubmedsearchstrings+mdsearchstrings+doisearchstrings+urlssearchstrings:
                 if stem.lower() in b.lower(): # case-insensitive match
                     confirmed_blocks.append(b)
                     # remove this block so that nested blocks are only counted once
@@ -654,6 +674,12 @@ def parse_citation_block(thisblock, force_lowercase=False):
                 results['ids'].append(new_entry['ID'])
             else:
                 results['notfound'].append(thisid)
+        elif thisid.lower().startswith('url:') and len(thisid)>4:
+            new_entry = findcitation(thisid[4:].strip(), 'url')
+            if new_entry:
+                results['ids'].append(new_entry['ID'])
+            else:
+                results['notfound'].append(thisid)
         else:
             results['notfound'].append(thisid)
     if force_lowercase:
@@ -676,6 +702,8 @@ def clean_id(thisid):
         thisid = casereplace(thisid, stem, '@')
     for stem in doisearchstrings:
         thisid = casereplace(thisid, stem, 'DOI:')
+    for stem in ['url:','URL:']:
+        thisid = casereplace(thisid, stem, 'URL:')
     return thisid
 
 askedalready = {}
@@ -776,6 +804,30 @@ Enter y/n within 10 seconds".format(
                         full_bibdat.add_entry(new_entry)
                         return new_entry
         print(f"Title {info} not found online.")
+    elif infotype == 'url':
+        # Normalize URL (ensure scheme, lowercase host)
+        try:
+            parsed = urllib.parse.urlparse(info)
+            if not parsed.scheme:
+                info = 'https://' + info
+                parsed = urllib.parse.urlparse(info)
+            parsed = parsed._replace(netloc=(parsed.netloc or '').lower())
+            normalized_url = urllib.parse.urlunparse(parsed)
+        except Exception:
+            normalized_url = info
+
+        # Return existing entry by URL if present
+        try:
+            entry = full_bibdat.get_entry_by_url(normalized_url)
+        except Exception:
+            entry = None
+        if entry:
+            return entry
+
+        # Create minimal bib entry
+        new_entry = build_url_bib_entry(normalized_url)
+        full_bibdat.add_entry(new_entry)
+        return new_entry
 
 def id2pmid(theseids, notpmidlist=[]):
     """
@@ -832,22 +884,6 @@ def pmid2id(thesepmids, others):
                 missing_ids.append(pmid)
     return outids, missing_ids
 
-def format_inline(thisid):
-    global cited_bibdat
-    au = cited_bibdat.entries_dict[thisid]['Author'].split(" and ")
-    if len(au)>1:
-        au = au[0] + " et al"
-    else:
-        au = au[0]
-    formatted_citation = "{}. {} {};{}:{}".format(
-        au,
-        cited_bibdat.entries_dict[thisid]['Journal'].capitalize(),
-        cited_bibdat.entries_dict[thisid]['Year'],
-        cited_bibdat.entries_dict[thisid]['Volume'],
-        cited_bibdat.entries_dict[thisid]['Pages'],
-        )
-    return formatted_citation
-
 def pmidout(pmidlist, notpmidlist):
     '''
     make a blockstring to replace PMIDs in a citation list
@@ -885,10 +921,6 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
         blockstring += "\\cite{%s}"%(', '.join(theseids))
         if len(thesemissing) > 0:
             blockstring += "[**{}]".format(', '.join(thesemissing))
-    elif outputstyle == "inline":
-        blockstring += "({})".format(', '.join([format_inline(x) for x in theseids]))
-        if len(thesemissing) > 0:
-            blockstring += "[***{}]".format(', '.join(thesemissing))
     return blockstring
 
 def replace_ids_in_text(text):
@@ -939,7 +971,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     # there are slightly different procedures for each reference type:
     for b in p+l+w:
         citedhere = parse_citation_block(b, flc)
-        if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+        if outputstyle == 'md' or outputstyle=='tex':
             theseids, notfound = pmid2id(citedhere['pmids'], citedhere['notfound']) # ids added to bib
             theseids = remove_duplicates_preserve_order(theseids+citedhere['ids'])
             cite(theseids)
@@ -954,7 +986,7 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     for b in r:
         theseids, theseothers = parse_wholecitation_block(b, flc)
         cite(theseids)
-        if outputstyle == 'md' or outputstyle=='tex' or outputstyle=='inline':
+        if outputstyle == 'md' or outputstyle=='tex':
             replacedict[b] = mdout(theseids, theseothers, outputstyle, flc=flc)
         elif outputstyle=='pmid':
             pm, notpm = id2pmid(theseids) # ids added to bib
@@ -1184,17 +1216,44 @@ def getlink(entry):
     '''
     try:
         url = "http://dx.doi.org/{}".format(entry['doi'])
-    except:
+    except Exception:
         try:
             url = "https://www.ncbi.nlm.nih.gov/pmc/articles/{}/".format(entry['pmcid'])
-        except:
-            url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
+        except Exception:
+            try:
+                url = "http://www.ncbi.nlm.nih.gov/pubmed/{}".format(entry['pmid'])
+            except Exception:
+                if 'url' in entry:
+                    url = entry['url']
+                else:
+                    url = ''
     return url
 
 def print_all_ids(bibdat):
     print ("=======\nPrinting all ids:\n")
     for entry in bibdat.entries:
         print(entry['ID'])
+
+def build_url_bib_entry(url):
+    """
+    Create a minimal BibTeX entry for a URL-only citation.
+    Uses @misc with `url` and `urldate`. ID derived from host and path.
+    """
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.netloc or 'url').lower()
+    path_bits = [seg for seg in parsed.path.split('/') if seg]
+    core = host + ''.join(path_bits[:3])
+    core = re.sub(r'\W+', '', core).lower() or 'url'
+    if len(core) < 3:
+        core = 'url_' + hashlib.md5(url.encode('utf-8')).hexdigest()[:8]
+    entry = {
+        'ENTRYTYPE': 'misc',
+        'ID': core,
+        'url': url,
+        'urldate': datetime.date.today().isoformat(),
+        'Title': url,
+    }
+    return entry
 
 def main(
     filepath,
@@ -1222,6 +1281,7 @@ def main(
     with io.open(filepath, "r", encoding="utf-8") as f:
         text = f.read()
     text = make_unicode(text)
+    original_header, _ = readheader(text)
     if verbose:
         print("Read input file:", filepath)
 
@@ -1240,7 +1300,7 @@ def main(
     
     # GET OUTPUTSTYLE
     input_file_extension = filepath.split('.')[-1]
-    if filepath.endswith((".md", ".txt", ".qmd")):
+    if filepath.endswith((".md", ".txt", ".qmd", ".csv")):
         if outputstyle == 'null':
             outputstyle = 'md'
     elif filepath.endswith(".tex"):
@@ -1256,9 +1316,6 @@ def main(
         elif outputstyle in ('latex', 'tex'):
             print("Outputstyle = tex")
             citelabel = ".citetex."
-        elif outputstyle == 'inline':
-            print("Outputstyle = inline")
-            citelabel = "."
     else:
         print("Overwriting original file")
         citelabel = "."
@@ -1319,8 +1376,8 @@ def main(
     # Save new text file
     outputfile = os.path.join(outpath, filestem + citelabel + input_file_extension)
     with io.open(outputfile, 'w', encoding='utf-8') as file:
-        if outputstyle == "md":
-            file.write('---\n{}\n---'.format(yaml.dump(workingyaml)).replace("\n\n", "\n"))
+        if outputstyle == "md" and original_header:
+            file.write(original_header)
         file.write(text + "\n\n")
         print("Outputfile:", outputfile)
 
@@ -1334,7 +1391,7 @@ if __name__ == "__main__":
     parser.add_argument('-y', '--yaml', default='_quarto.yml', help='YAML file to use')
     # Other options
     parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='Try to match whole references.')
-    parser.add_argument('-o', '--outputstyle', type=str, choices=['md', '.qmd', 'markdown', 'tex', 'latex', 'pubmed', 'pmid', 'inline'], default='null', help='Output references format')
+    parser.add_argument('-o', '--outputstyle', type=str, choices=['md', '.qmd', 'markdown', 'tex', 'latex', 'pubmed', 'pmid'], default='null', help='Output references format')
     parser.add_argument('-s', '--safemode', action="store_true", default=False, help='Overwrite input file with new version')
     parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='Use only local BibTeX file')
     parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False, help='Force all citation references into lowercase')

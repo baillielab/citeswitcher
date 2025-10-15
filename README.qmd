@@ -138,7 +138,7 @@ This can be done with conda, or pip.
 |----|--------------|---------------------------|
 | -b | --bibfile | bibfile |
 | -y | --yaml | specify a yaml file to use as a source for yaml; use "normal" or "fancy" to copy from sup-files/yaml|
-| -o | --outputstyle | choices=md,markdown,tex,latex,pubmed,pmid,inline; output references format |
+| -o | --outputstyle | choices=md,markdown,tex,latex,pubmed,pmid; output references format |
 | -p | --pandoc_outputs | append as many pandoc formats as you want: pdf docx html txt md tex |
 | -l | --localbibonly | use only local bib file |
 | -d | --outputsubdir | outputdir - always a subdir of the working directory || -img | --imagedir | imagedirectoryname |

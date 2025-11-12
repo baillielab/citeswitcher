@@ -1485,12 +1485,14 @@ def main(
 
     # save local cs.bib file
     # keep any uncited items in localbibdat because the user might want them. But remove duplicates. User can handle this manually. 
-    merge_bibdat_duplicates(cited_bibdat, local_bibdat)
+    # Merge cited entries into the existing local bib so we never delete uncited entries
+    merge_bibdat_duplicates(local_bibdat, cited_bibdat)
     bibdir, bibfilename = os.path.split(localbibpath)
     bibstem = '.'.join(bibfilename.split('.')[:-1])
     localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")
     print('\nSaving bibliography for this file here:', localbibpath)
-    outbib = bibtexparser.dumps(cited_bibdat)
+    # Write the merged local bibliography (original local entries + any newly cited ones)
+    outbib = bibtexparser.dumps(local_bibdat)
     outbib = make_unicode(outbib)
     with open(localbibpath, "w", encoding="utf-8") as bf:
         bf.write(outbib)

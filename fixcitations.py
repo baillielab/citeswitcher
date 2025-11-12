@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
+# TODO: streamline and combine the YAML and bibliography selection sections. YAML only needed for bibliography. Ignore everything else. 
+
 import argparse
 import calendar
 import copy
@@ -433,16 +435,6 @@ def findreplace(inputtext, frdict):
         inputtext = inputtext.replace(f, str(frdict[f]))
     return inputtext
 
-def getyaml(text):
-    h,r = readheader(text)
-    if h.startswith("---"):
-        h = h[4:-3] # strip yaml identifiers
-    yml = yaml.load(h, Loader=yaml.Loader)
-    if yml:
-        return yml
-    else:
-        return {}
-
 def mergeyaml(priority_yaml, extra_yaml):
     # keep the contents of the first yaml if there is a conflict
     if not(priority_yaml):
@@ -485,6 +477,30 @@ def readheader(filecontents):
             h = h2[0]
         remainder = filecontents.replace(h,'')
     return h, remainder
+
+def load_first_yaml_doc(yaml_text):
+    """
+    Safely load only the first YAML document from a string. Returns a dict or None.
+    """
+    try:
+        # Strip common front-matter fences so PyYAML doesn't treat the closing '---' as a new doc
+        txt = yaml_text if yaml_text is not None else ""
+        lines = txt.splitlines()
+        if lines and lines[0].strip() == '---':
+            # remove leading fence
+            lines = lines[1:]
+            # remove trailing fence if present ('---' or '...')
+            while lines and lines[-1].strip() == '':
+                lines.pop()
+            if lines and lines[-1].strip() in ('---', '...'):
+                lines = lines[:-1]
+        normalized = "\n".join(lines)
+        for doc in yaml.safe_load_all(normalized):
+            if isinstance(doc, dict):
+                return doc
+        return None
+    except Exception:
+        return None
 
 def flatten(thislist):
     listcount = [1 for x in thislist if type(x)==type([])]
@@ -923,13 +939,13 @@ def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
             blockstring += "[**{}]".format(', '.join(thesemissing))
     return blockstring
 
-def replace_ids_in_text(text):
+def replace_ids_in_text(thistext):
     """
-    Replace occurrences of old IDs with new IDs in the text, using the global regex patterns.
-    Returns both the updated text and a report of changes made.
+    Replace occurrences of old IDs with new IDs in the thistext, using the global regex patterns.
+    Returns both the updated thistext and a report of changes made.
     
     Returns:
-        tuple: (updated_text, report) where report is a string describing all changes made
+        tuple: (updated_thistext, report) where report is a string describing all changes made
     """
     global full_bibdat
     patterns = [
@@ -950,7 +966,7 @@ def replace_ids_in_text(text):
                 report_lines.append(newline)
         return citation_block
     
-    updated_text = re.sub(combined_pattern, replace_ids_in_match, text)
+    updated_text = re.sub(combined_pattern, replace_ids_in_match, thistext)
     report = "\n".join(report_lines) if report_lines else "No replacements made"
     
     return updated_text, report
@@ -1264,7 +1280,8 @@ def main(
     safemode,
     localbibonly,
     force_lowercase_citations,
-    verbose
+    verbose,
+    localbibfile
 ):
     global full_bibdat, cited_bibdat
     full_bibdat = BibData()
@@ -1279,24 +1296,60 @@ def main(
 
     # Read input file
     with io.open(filepath, "r", encoding="utf-8") as f:
-        text = f.read()
-    text = make_unicode(text)
-    original_header, _ = readheader(text)
+        inputfiletext = f.read()
+    inputfiletext = make_unicode(inputfiletext)
+    original_header, original_text = readheader(inputfiletext)
     if verbose:
         print("Read input file:", filepath)
 
-    # READ YAML FROM INPUT FILE FIRST
-    infileyaml = getyaml(text)
-    workingyaml = copy.copy(infileyaml)
-    # THEN READ FROM FILENAME.YAML
-    yamlfile = os.path.join(sourcepath, filestem + ".yaml")
-    if os.path.exists(yamlfile):
-        with open(yamlfile) as f:
-            workingyaml = mergeyaml(workingyaml, getyaml(f.read()))
-    # THEN READ FROM SPECIFIED yaml_file
-    if os.path.exists(yaml_file):
-        with open(yaml_file) as f:
-            workingyaml = mergeyaml(workingyaml, getyaml(f.read()))
+    # Collect bibliography entries from YAML (inline header and sidecar YAML files)
+    yaml_bibs = []
+    # READ YAML FROM INPUT FILE HEADER FIRST (only 'bibliography')
+    infileyaml = load_first_yaml_doc(original_header)
+    if infileyaml and 'bibliography' in infileyaml and infileyaml['bibliography']:
+        inline_bibs = infileyaml['bibliography'] if isinstance(infileyaml['bibliography'], list) else [infileyaml['bibliography']]
+        for b in inline_bibs:
+            if os.path.isabs(b):
+                yaml_bibs.append(os.path.abspath(b))
+            else:
+                yaml_bibs.append(os.path.abspath(os.path.join(sourcepath, b)))
+    # THEN READ FROM FILENAME.YAML (only 'bibliography')
+    yaml_candidates = [
+        os.path.join(sourcepath, filestem + ".yaml"),
+        os.path.join(sourcepath, filestem + ".yml"),
+        os.path.join(sourcepath, "_quarto.yml"),
+        os.path.join(sourcepath, "../", "_quarto.yml"),
+        os.path.join(sourcepath, "../../", "_quarto.yml"),
+    ]
+    if yaml_file:
+        y_abs = os.path.abspath(os.path.expanduser(yaml_file))
+        yaml_candidates += [
+            y_abs,
+            os.path.join(sourcepath, yaml_file)
+        ]
+    # Extract any found YAML bibliographies in order
+    already = []
+    for ypath in yaml_candidates:
+        if os.path.abspath(ypath) in already:
+            continue
+        else:
+            already.append(os.path.abspath(ypath))
+        try:
+            if os.path.exists(ypath):
+                with open(ypath) as f:
+                    thistext = f.read()
+                    yml = load_first_yaml_doc(thistext)
+                    if yml and 'bibliography' in yml and yml['bibliography']:
+                        yaml_dir = os.path.dirname(os.path.abspath(ypath))
+                        entries = yml['bibliography'] if isinstance(yml['bibliography'], list) else [yml['bibliography']]
+                        for b in entries:
+                            if os.path.isabs(b):
+                                yaml_bibs.append(os.path.abspath(b))
+                            else:
+                                yaml_bibs.append(os.path.abspath(os.path.join(yaml_dir, b)))
+                print (f"Found YAML in {ypath}:")
+        except Exception:
+            continue
     
     # GET OUTPUTSTYLE
     input_file_extension = filepath.split('.')[-1]
@@ -1320,13 +1373,96 @@ def main(
         print("Overwriting original file")
         citelabel = "."
 
-    # BIB - read them all and copy into one local version
-    if 'bibliography' in workingyaml.keys():
-        print('Using YAML-specified bib:', workingyaml['bibliography'])
+    # BIB - discover local bibliography file with clear priority and messaging
+    # Priority: command-line -b > YAML 'bibliography' (list order) > 'cs.bib' > other .bib in folder (alphabetical)
+    bib_candidates = []  # list of tuples (abspath, reason)
+
+    # 1) Command line override
+    if localbibfile:
+        lb_abs = os.path.abspath(os.path.expanduser(localbibfile))
+        if not os.path.isabs(localbibfile):
+            # also allow relative to sourcepath if not absolute
+            lb_src = os.path.abspath(os.path.join(sourcepath, localbibfile))
+            if os.path.exists(lb_src):
+                lb_abs = lb_src
+        bib_candidates.append((lb_abs, "specified via -b/--bibfile"))
+
+    # 2) YAML 'bibliography' entries collected above (already absolute)
+    if yaml_bibs:
+        for b in yaml_bibs:
+            bib_candidates.append((b, "from YAML 'bibliography'"))
+        print ("yamlbib:", yaml_bibs)
+
+    # 3) Default cs.bib in same folder
+    cs_path = os.path.abspath(os.path.join(sourcepath, default_localbibname))
+    if os.path.exists(cs_path):
+        bib_candidates.append((cs_path, f"default '{default_localbibname}' in source folder"))
+
+    # 4) Any other .bib files in folder (alphabetical)
+    try:
+        others = [os.path.abspath(os.path.join(sourcepath, f)) for f in os.listdir(sourcepath) if f.lower().endswith('.bib')]
+    except Exception:
+        others = []
+    for p in sorted(others):
+        if (p, "other .bib in source folder") not in bib_candidates:
+            # avoid duplicates; will be filtered again below
+            bib_candidates.append((p, "other .bib in source folder"))
+
+    # Deduplicate while preserving order
+    seen = set()
+    filtered_candidates = []
+    for p, r in bib_candidates:
+        key = os.path.abspath(p)
+        if key not in seen:
+            seen.add(key)
+            filtered_candidates.append((key, r))
+
+    # Filter to those that actually exist
+    existing_candidates = [(p, r) for (p, r) in filtered_candidates if os.path.exists(p)]
+
+    print (f"existing_candidates: {existing_candidates}")
+
+    # Choose best candidate per priority order given above
+    chosen_bib = None
+    chosen_reason = None
+    if existing_candidates:
+        # Re-apply priority: -b first
+        for p, r in existing_candidates:
+            if "-b/--bibfile" in r:
+                chosen_bib, chosen_reason = p, r
+                break
+        if chosen_bib is None:
+            # YAML entries next, in the order they appeared
+            for p, r in existing_candidates:
+                if r == "from YAML 'bibliography'":
+                    chosen_bib, chosen_reason = p, r
+                    break
+        if chosen_bib is None:
+            # cs.bib next
+            for p, r in existing_candidates:
+                if r.startswith("default"):
+                    chosen_bib, chosen_reason = p, r
+                    break
+        if chosen_bib is None:
+            # any other .bib
+            chosen_bib, chosen_reason = existing_candidates[0]
+
+    # Fallback if nothing exists at all: use default path even if it doesn't exist (will be created later)
+    if chosen_bib is None:
+        chosen_bib = cs_path
+        chosen_reason = f"fallback to default '{default_localbibname}' in source folder"
+
+    # Messaging
+    if len(existing_candidates) > 1:
+        print("Multiple local .bib files found. Selection priority is: -b flag > YAML 'bibliography' entries > 'cs.bib' > other .bib files (alphabetical).")
+        print("Candidates considered:")
+        for p, r in existing_candidates:
+            print(f" - {p} ({r})")
+        print(f"Chosen local bibliography: {chosen_bib} ({chosen_reason})")
     else:
-        workingyaml['bibliography'] = default_localbibname  # HARD OVERWRITE
-    localbibpath = os.path.join(sourcepath, workingyaml['bibliography'])
-    print(f"Using {localbibpath} as bibout")
+        print(f"Using local bibliography: {chosen_bib} ({chosen_reason})")
+
+    localbibpath = chosen_bib
     original_fullbib_content = None
 
     # Read bib files and get ID changes
@@ -1340,13 +1476,11 @@ def main(
         full_bibdat, original_fullbib_content = read_bib_file(globalbibfile, flc=force_lowercase_citations)
         merge_bibdat_duplicates(full_bibdat, local_bibdat)
 
-    text, id_change_report = replace_ids_in_text(text)
+    output_text, id_change_report = replace_ids_in_text(original_text)
     if len(id_change_report)>0:
         print ("\n ID changes in the following citations:")
         print (id_change_report)
-
-    text = readheader(text)[1]
-    text = replace_blocks(text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
+    output_text = replace_blocks(output_text, outputstyle, use_whole=wholereference, flc=force_lowercase_citations)
     
 
     # save local cs.bib file
@@ -1378,7 +1512,7 @@ def main(
     with io.open(outputfile, 'w', encoding='utf-8') as file:
         if outputstyle == "md" and original_header:
             file.write(original_header)
-        file.write(text + "\n\n")
+        file.write(output_text + "\n\n")
         print("Outputfile:", outputfile)
 
 if __name__ == "__main__":
@@ -1388,7 +1522,8 @@ if __name__ == "__main__":
     parser.add_argument("-f", '--filepath', help='Path to the input file', default="../genomicc-manuscript/manuscript.tex")
     # Additional files to specify
     parser.add_argument('-gb', '--globalbibfile', default=default_global_bibfile, help='BibTeX file')
-    parser.add_argument('-y', '--yaml', default='_quarto.yml', help='YAML file to use')
+    parser.add_argument('-y', '--yaml', default=None, help='YAML file to use (looked up in file folder if relative)')
+    parser.add_argument('-b', '--bibfile', default=None, help='Local BibTeX file to use (overrides YAML)')
     # Other options
     parser.add_argument('-w', '--wholereference', action="store_true", default=False, help='Try to match whole references.')
     parser.add_argument('-o', '--outputstyle', type=str, choices=['md', '.qmd', 'markdown', 'tex', 'latex', 'pubmed', 'pmid'], default='null', help='Output references format')
@@ -1410,7 +1545,8 @@ if __name__ == "__main__":
         safemode=args.safemode,
         localbibonly=args.localbibonly,
         force_lowercase_citations=args.force_lowercase_citations,
-        verbose=verbose
+        verbose=verbose,
+        localbibfile=args.bibfile
     )
 
 

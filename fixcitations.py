@@ -18,15 +18,16 @@ import requests
 import select
 import sys
 from collections import OrderedDict
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
-scriptpath = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.join(scriptpath, 'dependencies/'))
+scriptpath = Path(__file__).resolve().parent
+sys.path.append(str(scriptpath / 'dependencies'))
 import oyaml as yaml
 import Entrez
 import latexchars
 
-sys.path.append(os.path.join(scriptpath, 'dependencies/python-bibtexparser-master/'))
+sys.path.append(str(scriptpath / 'dependencies' / 'python-bibtexparser-master'))
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
@@ -40,9 +41,12 @@ with warnings.catch_warnings():
         import collections.abc
         collections.Hashable = collections.abc.Hashable
 
+# Suppress urllib3 OpenSSL/LibreSSL warnings
+warnings.filterwarnings("ignore", module="urllib3")
+
 #---
 default_localbibname = "cs.bib"
-default_global_bibfile = os.path.join(scriptpath,'_bibfiles/lib.pmid.bib')
+default_global_bibfile = scriptpath / '_bibfiles' / 'lib.pmid.bib'
 #---
 
 markdown_labels_to_ignore = [
@@ -246,14 +250,14 @@ class cd:
         ...nested code
     '''
     def __init__(self, newPath):
-        self.newPath = os.path.expanduser(newPath)
+        self.newPath = Path(newPath).expanduser()
 
     def __enter__(self):
-        self.savedPath = os.getcwd()
-        os.chdir(self.newPath)
+        self.savedPath = Path.cwd()
+        os.chdir(str(self.newPath))
 
     def __exit__(self, etype, value, traceback):
-        os.chdir(self.savedPath)
+        os.chdir(str(self.savedPath))
 
 def remove_duplicates_preserve_order(thislist):
     return list(OrderedDict.fromkeys(thislist))
@@ -262,22 +266,23 @@ def fix_permissions(this_path):
     os.system("/bin/chmod 755 %s"%(this_path))
 
 def check_dir(this_dir):
-    if not os.path.isdir(this_dir):
-        os.mkdir(this_dir)
-    fix_permissions(this_dir)
+    dir_path = Path(this_dir)
+    if not dir_path.is_dir():
+        dir_path.mkdir(parents=True, exist_ok=True)
+    fix_permissions(str(dir_path))
 
 def getconfig(cfgfile="null"):
     if cfgfile=="null":
         for cfgname in ['config_local.json', "config.json"]:
-            cfgfile = os.path.join(scriptpath, cfgname)
-            if os.path.exists(cfgfile):
+            cfgfile = scriptpath / cfgname
+            if cfgfile.exists():
                 break
     with open(cfgfile) as json_data_file:
         data = json.load(json_data_file)
     for item in data:
         if type(data[item]) is str:
             if data[item].startswith("{{scriptpath}}"):
-                data[item] = os.path.join(scriptpath, data[item].replace("{{scriptpath}}",""))
+                data[item] = str(scriptpath / data[item].replace("{{scriptpath}}",""))
     try:
         Entrez.email = data['email']
     except:
@@ -387,15 +392,14 @@ def parse_bib_contents(bibfilecontents):
 def read_bib_file(bibfilepath, flc=False):
     original_contents = ""
     bibdata = BibData()
-    if os.path.exists(bibfilepath):
-        size = os.path.getsize(bibfilepath)
+    bib_path = Path(bibfilepath)
+    if bib_path.exists():
+        size = bib_path.stat().st_size
         if size > 0:
             try:
-                with open(bibfilepath, encoding="utf-8") as bf:
-                    content = bf.read()
+                content = bib_path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
-                with open(bibfilepath, encoding="latin1") as bf:
-                    content = bf.read()
+                content = bib_path.read_text(encoding="latin1")
             original_contents = copy.copy(content)
             try:
                 bibdata = parse_bib_contents(content)
@@ -499,8 +503,61 @@ def load_first_yaml_doc(yaml_text):
             if isinstance(doc, dict):
                 return doc
         return None
-    except Exception:
+    except (yaml.YAMLError, AttributeError, TypeError):
         return None
+
+def update_yaml_key_preserving_format(yaml_content, key, value):
+    """
+    Update a YAML key while preserving original formatting as much as possible.
+    Returns updated YAML content with the key added or updated.
+    """
+    if not yaml_content or not yaml_content.strip():
+        # Empty content, create new YAML
+        return f"---\n{key}: {value}\n---\n"
+    
+    # Parse to check structure
+    try:
+        yml_dict = load_first_yaml_doc(yaml_content)
+        if yml_dict is None:
+            yml_dict = {}
+    except Exception:
+        yml_dict = {}
+    
+    # Update the dictionary
+    yml_dict[key] = value
+    
+    # Determine original format
+    lines = yaml_content.splitlines()
+    has_leading_fence = lines and lines[0].strip() == '---'
+    has_trailing_fence = False
+    trailing_fence_type = '---'
+    
+    if has_leading_fence:
+        # Check for trailing fence
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if line in ('---', '...'):
+                has_trailing_fence = True
+                trailing_fence_type = line
+                break
+            elif line:
+                break
+    
+    # Generate new YAML content
+    yaml_str = yaml.dump(yml_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    
+    # Reconstruct with original fence format
+    result_lines = []
+    if has_leading_fence:
+        result_lines.append('---')
+    result_lines.append(yaml_str.rstrip())
+    if has_trailing_fence:
+        result_lines.append(trailing_fence_type)
+    elif has_leading_fence:
+        # If had leading fence but no trailing, add one for consistency
+        result_lines.append('---')
+    
+    return '\n'.join(result_lines) + '\n'
 
 def flatten(thislist):
     listcount = [1 for x in thislist if type(x)==type([])]
@@ -1288,75 +1345,94 @@ def main(
     cited_bibdat = BibData()
 
     # Determine source path and filenames
-    sourcepath, filename = os.path.split(filepath)
-    outpath = os.path.join(sourcepath)
-    if outpath != '':
-        check_dir(outpath)
-    filestem = '.'.join(filename.split('.')[:-1])
+    filepath_obj = Path(filepath)
+    sourcepath = filepath_obj.parent
+    filename = filepath_obj.name
+    outpath = sourcepath
+    if str(outpath) != '':
+        check_dir(str(outpath))
+    filestem = filepath_obj.stem
 
     # Read input file
-    with io.open(filepath, "r", encoding="utf-8") as f:
-        inputfiletext = f.read()
+    inputfiletext = Path(filepath).read_text(encoding="utf-8")
     inputfiletext = make_unicode(inputfiletext)
     original_header, original_text = readheader(inputfiletext)
     if verbose:
         print("Read input file:", filepath)
 
     # Collect bibliography entries from YAML (inline header and sidecar YAML files)
+    # Track which YAML file provided each bibliography entry and their order
     yaml_bibs = []
+    bib_to_yaml_file = {}  # maps bibliography path to YAML file path (or None for inline)
+    yaml_files_checked = []  # track all YAML files for CSL checking: list of (yaml_path, yaml_content, original_content, order)
+    yaml_order = 0  # track order of YAML files
+    
     # READ YAML FROM INPUT FILE HEADER FIRST (only 'bibliography')
     infileyaml = load_first_yaml_doc(original_header)
-    if infileyaml and 'bibliography' in infileyaml and infileyaml['bibliography']:
-        inline_bibs = infileyaml['bibliography'] if isinstance(infileyaml['bibliography'], list) else [infileyaml['bibliography']]
-        for b in inline_bibs:
-            if os.path.isabs(b):
-                yaml_bibs.append(os.path.abspath(b))
-            else:
-                yaml_bibs.append(os.path.abspath(os.path.join(sourcepath, b)))
+    if infileyaml:
+        yaml_files_checked.append((None, infileyaml, original_header, yaml_order))  # None means inline YAML
+        yaml_order += 1
+        if 'bibliography' in infileyaml and infileyaml['bibliography']:
+            inline_bibs = infileyaml['bibliography'] if isinstance(infileyaml['bibliography'], list) else [infileyaml['bibliography']]
+            for b in inline_bibs:
+                b_path = Path(b)
+                if b_path.is_absolute():
+                    abs_b = str(b_path.resolve())
+                else:
+                    abs_b = str((sourcepath / b).resolve())
+                yaml_bibs.append(abs_b)
+                bib_to_yaml_file[abs_b] = None  # None means inline YAML
     # THEN READ FROM FILENAME.YAML (only 'bibliography')
     yaml_candidates = [
-        os.path.join(sourcepath, filestem + ".yaml"),
-        os.path.join(sourcepath, filestem + ".yml"),
-        os.path.join(sourcepath, "_quarto.yml"),
-        os.path.join(sourcepath, "../", "_quarto.yml"),
-        os.path.join(sourcepath, "../../", "_quarto.yml"),
+        sourcepath / (filestem + ".yaml"),
+        sourcepath / (filestem + ".yml"),
+        sourcepath / "_quarto.yml",
+        sourcepath.parent / "_quarto.yml",
+        sourcepath.parent.parent / "_quarto.yml",
     ]
     if yaml_file:
-        y_abs = os.path.abspath(os.path.expanduser(yaml_file))
-        yaml_candidates += [
-            y_abs,
-            os.path.join(sourcepath, yaml_file)
-        ]
+        y_path = Path(yaml_file).expanduser().resolve()
+        # Only add resolved absolute path to avoid duplicates
+        if y_path not in yaml_candidates:
+            yaml_candidates.append(y_path)
     # Extract any found YAML bibliographies in order
-    already = []
+    already = set()
     for ypath in yaml_candidates:
-        if os.path.abspath(ypath) in already:
+        ypath_resolved = ypath.resolve()
+        ypath_abs = str(ypath_resolved)
+        if ypath_abs in already:
             continue
-        else:
-            already.append(os.path.abspath(ypath))
+        already.add(ypath_abs)
         try:
-            if os.path.exists(ypath):
-                with open(ypath) as f:
-                    thistext = f.read()
-                    yml = load_first_yaml_doc(thistext)
-                    if yml and 'bibliography' in yml and yml['bibliography']:
-                        yaml_dir = os.path.dirname(os.path.abspath(ypath))
+            if ypath_resolved.exists():
+                thistext = ypath_resolved.read_text(encoding='utf-8')
+                yml = load_first_yaml_doc(thistext)
+                if yml:
+                    yaml_files_checked.append((ypath_abs, yml, thistext, yaml_order))
+                    yaml_order += 1
+                    if 'bibliography' in yml and yml['bibliography']:
+                        yaml_dir = ypath_resolved.parent
                         entries = yml['bibliography'] if isinstance(yml['bibliography'], list) else [yml['bibliography']]
                         for b in entries:
-                            if os.path.isabs(b):
-                                yaml_bibs.append(os.path.abspath(b))
+                            b_path = Path(b)
+                            if b_path.is_absolute():
+                                abs_b = str(b_path.resolve())
                             else:
-                                yaml_bibs.append(os.path.abspath(os.path.join(yaml_dir, b)))
-                print (f"Found YAML in {ypath}:")
-        except Exception:
+                                abs_b = str((yaml_dir / b).resolve())
+                            yaml_bibs.append(abs_b)
+                            bib_to_yaml_file[abs_b] = ypath_abs
+                print (f"Found YAML in {ypath_resolved}:")
+        except (OSError, IOError, yaml.YAMLError, UnicodeDecodeError) as e:
+            if verbose:
+                print(f"Error reading YAML file {ypath_resolved}: {e}")
             continue
     
     # GET OUTPUTSTYLE
-    input_file_extension = filepath.split('.')[-1]
-    if filepath.endswith((".md", ".txt", ".qmd", ".csv")):
+    input_file_extension = filepath_obj.suffix[1:] if filepath_obj.suffix else ""
+    if filepath_obj.suffix in (".md", ".txt", ".qmd", ".csv"):
         if outputstyle == 'null':
             outputstyle = 'md'
-    elif filepath.endswith(".tex"):
+    elif filepath_obj.suffix == ".tex":
         if outputstyle == 'null':
             outputstyle = 'tex'
     if safemode:
@@ -1379,46 +1455,60 @@ def main(
 
     # 1) Command line override
     if localbibfile:
-        lb_abs = os.path.abspath(os.path.expanduser(localbibfile))
-        if not os.path.isabs(localbibfile):
+        lb_path = Path(localbibfile).expanduser()
+        if lb_path.is_absolute():
+            lb_abs = str(lb_path.resolve())
+        else:
             # also allow relative to sourcepath if not absolute
-            lb_src = os.path.abspath(os.path.join(sourcepath, localbibfile))
-            if os.path.exists(lb_src):
-                lb_abs = lb_src
+            lb_src = (sourcepath / localbibfile).resolve()
+            if lb_src.exists():
+                lb_abs = str(lb_src)
+            else:
+                lb_abs = str(lb_path.resolve())
         bib_candidates.append((lb_abs, "specified via -b/--bibfile"))
 
     # 2) YAML 'bibliography' entries collected above (already absolute)
+    # Create any YAML-specified bibliography files that don't exist
     if yaml_bibs:
         for b in yaml_bibs:
+            bib_path = Path(b)
+            if not bib_path.exists():
+                # Create directory structure if needed
+                bib_path.parent.mkdir(parents=True, exist_ok=True)
+                # Create empty .bib file
+                bib_path.write_text("", encoding="utf-8")
+                print(f"Created YAML-specified bibliography file: {b}")
             bib_candidates.append((b, "from YAML 'bibliography'"))
         print ("yamlbib:", yaml_bibs)
 
     # 3) Default cs.bib in same folder
-    cs_path = os.path.abspath(os.path.join(sourcepath, default_localbibname))
-    if os.path.exists(cs_path):
-        bib_candidates.append((cs_path, f"default '{default_localbibname}' in source folder"))
+    cs_path = (sourcepath / default_localbibname).resolve()
+    if cs_path.exists():
+        bib_candidates.append((str(cs_path), f"default '{default_localbibname}' in source folder"))
 
     # 4) Any other .bib files in folder (alphabetical)
     try:
-        others = [os.path.abspath(os.path.join(sourcepath, f)) for f in os.listdir(sourcepath) if f.lower().endswith('.bib')]
-    except Exception:
+        others = [str((sourcepath / f).resolve()) for f in sourcepath.iterdir() if f.is_file() and f.suffix.lower() == '.bib']
+    except (OSError, PermissionError) as e:
+        if verbose:
+            print(f"Error reading source directory: {e}")
         others = []
     for p in sorted(others):
         if (p, "other .bib in source folder") not in bib_candidates:
             # avoid duplicates; will be filtered again below
             bib_candidates.append((p, "other .bib in source folder"))
 
-    # Deduplicate while preserving order
+    # Deduplicate while preserving order (using resolved paths)
     seen = set()
     filtered_candidates = []
     for p, r in bib_candidates:
-        key = os.path.abspath(p)
+        key = str(Path(p).resolve())
         if key not in seen:
             seen.add(key)
             filtered_candidates.append((key, r))
 
     # Filter to those that actually exist
-    existing_candidates = [(p, r) for (p, r) in filtered_candidates if os.path.exists(p)]
+    existing_candidates = [(p, r) for (p, r) in filtered_candidates if Path(p).resolve().exists()]
 
     print (f"existing_candidates: {existing_candidates}")
 
@@ -1447,10 +1537,130 @@ def main(
             # any other .bib
             chosen_bib, chosen_reason = existing_candidates[0]
 
-    # Fallback if nothing exists at all: use default path even if it doesn't exist (will be created later)
+    # Track where bibliography came from for CSL creation
+    bib_source = None  # 'yaml', 'command_line', 'default', or 'fallback'
+    
+    # Fallback if nothing exists at all: create default at _bib/cs.bib
     if chosen_bib is None:
-        chosen_bib = cs_path
-        chosen_reason = f"fallback to default '{default_localbibname}' in source folder"
+        chosen_bib_path = sourcepath / "_bib" / "cs.bib"
+        chosen_bib = str(chosen_bib_path.resolve())
+        # Create directory structure if needed
+        chosen_bib_path.parent.mkdir(parents=True, exist_ok=True)
+        # Create empty .bib file if it doesn't exist
+        if not chosen_bib_path.exists():
+            chosen_bib_path.write_text("", encoding="utf-8")
+            print(f"Created default bibliography file: {chosen_bib}")
+        chosen_reason = "fallback to default '_bib/cs.bib'"
+        bib_source = 'fallback'
+    else:
+        # Determine source based on reason
+        if "-b/--bibfile" in chosen_reason:
+            bib_source = 'command_line'
+        elif "from YAML" in chosen_reason:
+            bib_source = 'yaml'
+        elif "default" in chosen_reason or "fallback" in chosen_reason:
+            bib_source = 'default'
+
+    # CSL handling: check if CSL exists in any YAML, create if needed
+    has_csl = False
+    for yaml_path, yaml_content, original_content, order in yaml_files_checked:
+        if yaml_content and 'csl' in yaml_content:
+            has_csl = True
+            break
+    
+    # If no CSL exists, create CSL file (for YAML, default, command_line, or fallback)
+    if not has_csl and bib_source:
+        # Copy minimal.csl to the same directory as the bibliography
+        source_csl = Path(scriptpath) / "csl" / "minimal.csl"
+        bib_dir = Path(chosen_bib).parent.resolve()
+        target_csl = bib_dir / "minimal.csl"
+        
+        if source_csl.exists():
+            # Copy the CSL file
+            target_csl.parent.mkdir(parents=True, exist_ok=True)
+            target_csl.write_bytes(source_csl.read_bytes())
+            print(f"Created CSL file: {target_csl}")
+            
+            # Find the appropriate YAML file to update
+            yaml_file_for_bib = bib_to_yaml_file.get(chosen_bib)
+            
+            if bib_source == 'yaml' and yaml_file_for_bib is not None:
+                # Update the YAML file that specified this bibliography
+                # Find the YAML file entry with original content
+                yaml_file_path = None
+                original_yaml_content = None
+                for ypath, yml_content, orig_content, order in yaml_files_checked:
+                    if ypath == yaml_file_for_bib:
+                        yaml_file_path = Path(ypath)
+                        original_yaml_content = orig_content
+                        break
+                
+                if yaml_file_path and original_yaml_content:
+                    # Calculate relative path from YAML file's directory to target_csl
+                    yaml_dir = yaml_file_path.parent.resolve()
+                    try:
+                        csl_rel_path = str(target_csl.relative_to(yaml_dir))
+                    except ValueError:
+                        # Paths not related, use absolute path
+                        csl_rel_path = str(target_csl.resolve())
+                    
+                    # Preserve original YAML formatting by updating only the csl key
+                    updated_content = update_yaml_key_preserving_format(original_yaml_content, 'csl', csl_rel_path)
+                    yaml_file_path.write_text(updated_content, encoding="utf-8")
+                    print(f"Added CSL entry to {yaml_file_path}: {csl_rel_path}")
+            
+            elif bib_source == 'yaml' and yaml_file_for_bib is None:
+                # Inline YAML - need to update the original header
+                # Calculate relative path from sourcepath to target_csl
+                try:
+                    csl_rel_path = str(target_csl.relative_to(sourcepath.resolve()))
+                except ValueError:
+                    # Paths not related, use absolute path
+                    csl_rel_path = str(target_csl.resolve())
+                # Update the inline YAML in the original header
+                if infileyaml is None:
+                    infileyaml = {}
+                infileyaml['csl'] = csl_rel_path
+                # Preserve original header format
+                updated_header = update_yaml_key_preserving_format(original_header, 'csl', csl_rel_path)
+                original_header = updated_header
+                print(f"Added CSL entry to inline YAML: {csl_rel_path}")
+            
+            else:
+                # For command_line, default, or fallback: create/update a YAML file
+                # Try to find the first available YAML file, or create one
+                yaml_file_to_update = None
+                original_yaml_content = None
+                
+                # First, try to find an existing YAML file in sourcepath
+                for ypath, yml_content, orig_content, order in yaml_files_checked:
+                    if ypath and Path(ypath).parent.resolve() == sourcepath.resolve():
+                        yaml_file_to_update = Path(ypath)
+                        original_yaml_content = orig_content
+                        break
+                
+                # If no YAML file found, create one based on filestem
+                if yaml_file_to_update is None:
+                    yaml_file_to_update = sourcepath / (filestem + ".yaml")
+                    original_yaml_content = ""
+                
+                # Calculate relative path from YAML file's directory to target_csl
+                yaml_dir = yaml_file_to_update.parent.resolve()
+                try:
+                    csl_rel_path = str(target_csl.relative_to(yaml_dir))
+                except ValueError:
+                    csl_rel_path = str(target_csl.resolve())
+                
+                # Update or create YAML file
+                if original_yaml_content:
+                    updated_content = update_yaml_key_preserving_format(original_yaml_content, 'csl', csl_rel_path)
+                else:
+                    # Create new YAML file
+                    updated_content = f"---\ncsl: {csl_rel_path}\n---\n"
+                yaml_file_to_update.write_text(updated_content, encoding="utf-8")
+                print(f"Added CSL entry to {yaml_file_to_update}: {csl_rel_path}")
+        else:
+            print(f"Warning: Source CSL file not found: {source_csl}")
 
     # Messaging
     if len(existing_candidates) > 1:
@@ -1472,7 +1682,8 @@ def main(
         merge_bibdat_duplicates(full_bibdat)
     else:
         local_bibdat, _ = read_bib_file(localbibpath, flc=force_lowercase_citations)
-        globalbibfile = os.path.abspath(os.path.expanduser(globalbibfile))
+        globalbibfile_path = Path(globalbibfile).expanduser().resolve()
+        globalbibfile = str(globalbibfile_path)
         full_bibdat, original_fullbib_content = read_bib_file(globalbibfile, flc=force_lowercase_citations)
         merge_bibdat_duplicates(full_bibdat, local_bibdat)
 
@@ -1487,35 +1698,37 @@ def main(
     # keep any uncited items in localbibdat because the user might want them. But remove duplicates. User can handle this manually. 
     # Merge cited entries into the existing local bib so we never delete uncited entries
     merge_bibdat_duplicates(local_bibdat, cited_bibdat)
-    bibdir, bibfilename = os.path.split(localbibpath)
-    bibstem = '.'.join(bibfilename.split('.')[:-1])
-    localbibpath = os.path.join(bibdir, bibstem + citelabel + "bib")
+    localbibpath_obj = Path(localbibpath)
+    bibstem = localbibpath_obj.stem
+    localbibpath = str(localbibpath_obj.parent / (bibstem + citelabel + "bib"))
     print('\nSaving bibliography for this file here:', localbibpath)
     # Write the merged local bibliography (original local entries + any newly cited ones)
     outbib = bibtexparser.dumps(local_bibdat)
     outbib = make_unicode(outbib)
-    with open(localbibpath, "w", encoding="utf-8") as bf:
-        bf.write(outbib)
+    localbibpath_path = Path(localbibpath)
+    localbibpath_path.parent.mkdir(parents=True, exist_ok=True)
+    localbibpath_path.write_text(outbib, encoding="utf-8")
 
     # Save new global bibliography 
     new_bib_content = serialize_bib_database(full_bibdat)
     if original_fullbib_content is not None:
         if hash_content(original_fullbib_content) != hash_content(new_bib_content):
-            if not args.safemode:
+            if not safemode:
                 print('\nSaving updated global bibliography here:', globalbibfile)
-                os.makedirs(os.path.dirname(globalbibfile), exist_ok=True)
-                with open(globalbibfile, "w", encoding="utf-8") as bf:
-                    bf.write(new_bib_content)
+                globalbibfile_path = Path(globalbibfile)
+                globalbibfile_path.parent.mkdir(parents=True, exist_ok=True)
+                globalbibfile_path.write_text(new_bib_content, encoding="utf-8")
         else:
             print("Global bibliography unchanged. Skipping write.")
 
     # Save new text file
-    outputfile = os.path.join(outpath, filestem + citelabel + input_file_extension)
-    with io.open(outputfile, 'w', encoding='utf-8') as file:
+    outputfile_path = Path(outpath) / (filestem + citelabel + input_file_extension)
+    outputfile_path.parent.mkdir(parents=True, exist_ok=True)
+    with outputfile_path.open('w', encoding='utf-8') as file:
         if outputstyle == "md" and original_header:
             file.write(original_header)
         file.write(output_text + "\n\n")
-        print("Outputfile:", outputfile)
+        print("Outputfile:", str(outputfile_path))
 
 if __name__ == "__main__":
     config = getconfig()
@@ -1523,7 +1736,7 @@ if __name__ == "__main__":
     # Essential arguments
     parser.add_argument("-f", '--filepath', help='Path to the input file', default="../genomicc-manuscript/manuscript.tex")
     # Additional files to specify
-    parser.add_argument('-gb', '--globalbibfile', default=default_global_bibfile, help='BibTeX file')
+    parser.add_argument('-gb', '--globalbibfile', default=str(default_global_bibfile), help='BibTeX file')
     parser.add_argument('-y', '--yaml', default=None, help='YAML file to use (looked up in file folder if relative)')
     parser.add_argument('-b', '--bibfile', default=None, help='Local BibTeX file to use (overrides YAML)')
     # Other options
@@ -1539,8 +1752,8 @@ if __name__ == "__main__":
     verbose = args.verbose
     # Call the main function with parsed arguments
     main(
-        filepath=os.path.abspath(os.path.expanduser(args.filepath)),
-        globalbibfile=args.globalbibfile,
+        filepath=str(Path(args.filepath).expanduser().resolve()),
+        globalbibfile=str(args.globalbibfile) if isinstance(args.globalbibfile, Path) else args.globalbibfile,
         yaml_file=args.yaml,
         wholereference=args.wholereference,
         outputstyle=args.outputstyle,

@@ -31,6 +31,7 @@ sys.path.append(str(scriptpath / 'dependencies' / 'python-bibtexparser-master'))
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
+from bibtexparser.bibdatabase import BibDatabase
 
 # patch for yaml error in pythonista on ipad
 import collections
@@ -85,6 +86,32 @@ doisearchstrings = [
         ]
 no_user_response_count = 0
 
+def normalize_pmid_value(pmid):
+    """
+    Normalize a PMID value to a single digit-only string.
+
+    Handles common bad states like:
+    - "PMID:24717637"
+    - "24717637, 24717637"
+    - lists/tuples of values
+    Returns None if no digit-like PMID found.
+    """
+    if pmid is None:
+        return None
+    # Flatten common iterables
+    if isinstance(pmid, (list, tuple, set)):
+        parts = []
+        for x in pmid:
+            parts.extend(re.findall(r"\d+", str(x)))
+    else:
+        parts = re.findall(r"\d+", str(pmid))
+    if not parts:
+        return None
+    # De-dup while preserving order
+    parts = remove_duplicates_preserve_order(parts)
+    # BibTeX entries should have exactly one PMID; keep the first
+    return parts[0].strip() if parts[0].strip() else None
+
 class BibData:
     def __init__(self):
         self.entries = []
@@ -132,8 +159,13 @@ class BibData:
             self.entries_dict[resolved_id] = entry
 
         # Index the entry by PMID
-        pmid = entry.get('pmid') or entry.get('PMID')
+        pmid_raw = entry.get('pmid') or entry.get('PMID')
+        pmid = normalize_pmid_value(pmid_raw)
         if pmid:
+            # Normalize field storage to avoid bad keys like "247..., 247..."
+            entry['pmid'] = pmid
+            if 'PMID' in entry and str(entry.get('PMID')).strip() != pmid:
+                entry['PMID'] = pmid
             self.pmids_dict[pmid] = entry
 
         # Index the entry by DOI
@@ -199,8 +231,12 @@ class BibData:
             new_entries_dict[new_id] = entry
 
             # Update PMID index
-            pmid = entry.get('pmid') or entry.get('PMID')
+            pmid_raw = entry.get('pmid') or entry.get('PMID')
+            pmid = normalize_pmid_value(pmid_raw)
             if pmid:
+                entry['pmid'] = pmid
+                if 'PMID' in entry and str(entry.get('PMID')).strip() != pmid:
+                    entry['PMID'] = pmid
                 new_pmids_dict[pmid] = entry
 
             # Update DOI index
@@ -226,7 +262,8 @@ class BibData:
         return self.entries_dict.get(resolved_id)
 
     def get_entry_by_pmid(self, pmid):
-        return self.pmids_dict.get(pmid)
+        pmid_norm = normalize_pmid_value(pmid)
+        return self.pmids_dict.get(pmid_norm) if pmid_norm else None
 
     def get_entry_by_doi(self, doi):
         return self.dois_dict.get(doi)
@@ -459,28 +496,20 @@ def readheader(filecontents):
         Input is full text of file
         Returns list of header items + full text of remainder
     '''
-    t = filecontents.strip()
-    t = t.replace('\r','\n')
-    h = ""
-    remainder = filecontents
-    lines = [x for x in t.split('\n')] # don't strip because indentation matters
-    if lines[0].strip() == '---':
-        h1 = re.findall(r'---[\s\S]+?---',filecontents)
-        h2 = re.findall(r'---[\s\S]+?\.\.\.',filecontents)
-        if len(h1)>0 and len(h2)>0:
-            #print ("both yaml header formats match! Taking the shorter one")
-            if len(h1[0]) < len(h2[0]):
-                h=h1[0]
-                #print ("Choosing ---/---\n", h)
-            else:
-                h=h2[0]
-                #print ("Choosing ---/...\n", h)
-        elif len(h1)>0:
-            h = h1[0]
-        elif len(h2)>0:
-            h = h2[0]
-        remainder = filecontents.replace(h,'')
-    return h, remainder
+    # Normalize newlines but otherwise preserve original text verbatim.
+    # IMPORTANT: Only treat YAML front-matter as a header if it begins at the
+    # very start of the file; do not use a global replace (can remove content).
+    text = (filecontents or "").replace('\r\n', '\n').replace('\r', '\n')
+
+    # Support both "--- ... ---" and "--- ... ..." Quarto/Pandoc fences.
+    # Require the opening fence at the very start of the file.
+    m = re.match(r'\A---\s*\n[\s\S]*?\n(?:---|\.\.\.)\s*\n', text)
+    if not m:
+        return "", text
+
+    header = m.group(0)
+    remainder = text[len(header):]
+    return header, remainder
 
 def load_first_yaml_doc(yaml_text):
     """
@@ -647,9 +676,10 @@ def get_mixed_citation_blocks(inputtext):
     confirmed_blocks = []
     for theseparetheses in [squarebrackets, curlybrackets]:
         for b in get_parenthesised(inputtext, [theseparetheses]):
-            for crossreflabel in markdown_labels_to_ignore:
-                if remove_parentheses(b).startswith(crossreflabel):
-                    continue
+            # Skip non-citation labels like @fig:, #tbl:, etc.
+            b_inner = remove_parentheses(b)
+            if any(b_inner.startswith(crossreflabel) for crossreflabel in markdown_labels_to_ignore):
+                continue
             for stem in pubmedsearchstrings+mdsearchstrings+doisearchstrings+urlssearchstrings:
                 if stem.lower() in b.lower(): # case-insensitive match
                     confirmed_blocks.append(b)
@@ -728,6 +758,9 @@ def parse_citation_block(thisblock, force_lowercase=False):
         'notfound':[],
     }
     theseids = split_by_delimiter(remove_parentheses(thisblock))
+    # Check if this block contains any PMID: prefixes to help identify bare numeric PMIDs
+    has_pmid_prefix = 'PMID:' in thisblock.upper()
+    
     for thisid in theseids:
         thisid = clean_id(thisid)
         if thisblock.startswith("\\cite"): #latex formatting
@@ -753,8 +786,16 @@ def parse_citation_block(thisblock, force_lowercase=False):
                 results['ids'].append(new_entry['ID'])
             else:
                 results['notfound'].append(thisid)
+        elif has_pmid_prefix and thisid.strip().isdigit():
+            # If block contains PMID: prefix and this is a bare numeric string, treat it as a PMID
+            # Deduplicate: only add if not already in pmids list
+            pmid_val = thisid.strip()
+            if pmid_val not in results['pmids']:
+                results['pmids'].append(pmid_val)
         else:
             results['notfound'].append(thisid)
+    # Deduplicate pmids list to avoid processing the same PMID multiple times
+    results['pmids'] = remove_duplicates_preserve_order(results['pmids'])
     if force_lowercase:
         results['ids'] = [x.lower() for x in results['ids']]
     return results
@@ -936,6 +977,71 @@ def id2pmid(theseids, notpmidlist=[]):
             notpmidlist.append(thisid)
     return pmidlist, notpmidlist
 
+def id2pmid_or_doi_or_id(theseids, notfoundlist=[]):
+    """
+    Converts a list of IDs to the best available identifier: PMID > DOI > ID.
+    Returns a list of tuples (identifier, type) where type is 'pmid', 'doi', or 'id'.
+    Deduplicates input IDs to avoid processing the same entry multiple times.
+    """
+    global full_bibdat
+    result_list = []
+    # DEBUG: Check for specific problematic string
+    debug_this = any('24717637' in str(id_val) for id_val in theseids)
+    if debug_this:
+        print(f"  DEBUG id2pmid_or_doi_or_id: input theseids = {theseids}")
+    
+    # Deduplicate input IDs to avoid processing the same entry multiple times
+    seen_ids = set()
+    unique_ids = []
+    for thisid in theseids:
+        id_normalized = str(thisid).strip()
+        if debug_this:
+            print(f"  DEBUG: processing thisid={thisid}, normalized={id_normalized}, in_seen={id_normalized in seen_ids}")
+        if id_normalized and id_normalized not in seen_ids:
+            seen_ids.add(id_normalized)
+            unique_ids.append(id_normalized)
+    
+    if debug_this:
+        print(f"  DEBUG: unique_ids after dedup = {unique_ids}")
+    
+    for thisid in unique_ids:
+        # Try to find this ID in full_bibdat
+        entry = full_bibdat.get_entry_by_id(thisid)
+        if debug_this:
+            print(f"  DEBUG: looking up thisid={thisid}, entry found={entry is not None}")
+        if entry:
+            # Priority 1: PMID
+            pmid = entry.get('pmid') or entry.get('PMID')
+            if debug_this:
+                print(f"  DEBUG: entry pmid={pmid}, type={type(pmid)}")
+            if pmid:
+                # Ensure PMID is a string for consistent formatting
+                pmid_str = str(pmid).strip()
+                result_tuple = (pmid_str, 'pmid')
+                if debug_this:
+                    print(f"  DEBUG: appending result_tuple={result_tuple}, type={type(result_tuple[0])}")
+                result_list.append(result_tuple)
+                continue
+            
+            # Priority 2: DOI
+            doi = entry.get('doi') or entry.get('DOI')
+            if doi:
+                # Ensure DOI is a string for consistent formatting
+                result_list.append((str(doi).strip(), 'doi'))
+                continue
+            
+            # Priority 3: ID (fallback)
+            result_list.append((str(thisid).strip(), 'id'))
+        else:
+            # ID not found in database
+            if debug_this:
+                print(f"  DEBUG: ID {thisid} not found, adding to notfoundlist")
+            notfoundlist.append(thisid)
+    
+    if debug_this:
+        print(f"  DEBUG id2pmid_or_doi_or_id: returning result_list = {result_list}")
+    return result_list, notfoundlist
+
 def pmid2id(thesepmids, others):
     """
     Converts a list of PMIDs to IDs.
@@ -963,17 +1069,78 @@ def pmidout(pmidlist, notpmidlist):
     '''
     blockstring = ''
     if len(pmidlist) > 0:
-        # add to the outputdatabase if possible but since PMID is the output format, it doesn't matter if we can't find it
-        for x in pmidlist:
-            try:
-                pmids[x]
-            except:
-                continue
         blockstring = '[' + ', '.join(["PMID:{}".format(x) for x in pmidlist]) + ']'
         if len(notpmidlist) > 0:
             blockstring += '[*' + ', '.join(notpmidlist) + ']'
     else:
         blockstring = 'null'
+    return blockstring
+
+def pmid_or_doi_or_id_out(identifier_list, notfoundlist):
+    '''
+    make a blockstring to replace citations with PMID (preferred), DOI (if no PMID), or ID (if neither).
+    identifier_list is a list of tuples (identifier, type) where type is 'pmid', 'doi', or 'id'.
+    Deduplicates by identifier value to avoid showing the same citation multiple times.
+    '''
+    # DEBUG: Check for specific problematic string
+    debug_this = any('24717637' in str(id_val) for id_val, _ in identifier_list) if identifier_list else False
+    if debug_this:
+        print(f"  DEBUG pmid_or_doi_or_id_out: input identifier_list = {identifier_list}")
+        print(f"  DEBUG: types and values:")
+        for idx, (id_val, id_type) in enumerate(identifier_list):
+            print(f"    [{idx}] id_val={id_val!r} (type={type(id_val)}), id_type={id_type!r} (type={type(id_type)})")
+    
+    blockstring = ''
+    if len(identifier_list) > 0:
+        # Deduplicate by identifier value, keeping the first occurrence
+        seen = set()
+        unique_list = []
+        for identifier, id_type in identifier_list:
+            # Normalize identifier for comparison (convert to string and strip)
+            identifier_str = str(identifier).strip()
+            if debug_this:
+                print(f"  DEBUG: checking identifier={identifier!r}, id_type={id_type!r}, identifier_str={identifier_str!r}, in_seen={identifier_str in seen}")
+            if identifier_str and identifier_str not in seen:
+                seen.add(identifier_str)
+                unique_list.append((identifier_str, id_type))
+                if debug_this:
+                    print(f"  DEBUG: added to unique_list")
+            elif debug_this:
+                print(f"  DEBUG: skipped (duplicate or empty)")
+        
+        if debug_this:
+            print(f"  DEBUG: unique_list after dedup = {unique_list}")
+        
+        formatted_items = []
+        for identifier, id_type in unique_list:
+            # Normalize type for comparison (case-insensitive, strip whitespace)
+            type_normalized = str(id_type).strip().lower() if id_type else ''
+            if debug_this:
+                print(f"  DEBUG: formatting identifier={identifier!r}, id_type={id_type!r}, type_normalized={type_normalized!r}")
+            if type_normalized == 'pmid':
+                formatted_items.append("PMID:{}".format(identifier))
+            elif type_normalized == 'doi':
+                formatted_items.append("DOI:{}".format(identifier))
+            elif type_normalized == 'id':
+                formatted_items.append("@{}".format(identifier))
+            else:
+                # Fallback: if type is unexpected, just use the identifier as-is
+                # This should not happen, but handle it gracefully
+                if debug_this:
+                    print(f"  DEBUG: WARNING - unexpected type, using identifier as-is")
+                formatted_items.append(str(identifier))
+        
+        if debug_this:
+            print(f"  DEBUG: formatted_items = {formatted_items}")
+        
+        blockstring = '[' + ', '.join(formatted_items) + ']'
+        if len(notfoundlist) > 0:
+            blockstring += '[*' + ', '.join(notfoundlist) + ']'
+    else:
+        blockstring = 'null'
+    
+    if debug_this:
+        print(f"  DEBUG pmid_or_doi_or_id_out: returning blockstring = {blockstring!r}")
     return blockstring
 
 def mdout(theseids, thesemissing=[], outputstyle="md", flc=False):
@@ -1031,10 +1198,13 @@ def replace_ids_in_text(thistext):
 def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
     workingtext = thistext
     p, workingtext = get_mixed_citation_blocks(workingtext) # pmid first as they are the most likely to have errors
-    l, workingtext = [x for x in get_latex_citation_blocks(workingtext) if x not in p]
-    w, workingtext = [x for x in get_word_citation_blocks(workingtext) if x not in p+l]
+    l, workingtext = get_latex_citation_blocks(workingtext)
+    l = [x for x in l if x not in p]
+    w, workingtext = get_word_citation_blocks(workingtext)
+    w = [x for x in w if x not in p+l]
     if use_whole:
-        r, workingtext = [x for x in get_wholereference_citation_blocks(workingtext, flc) if x not in p+l+w]
+        r, workingtext = get_wholereference_citation_blocks(workingtext, flc)
+        r = [x for x in r if x not in p+l+w]
     else:
         r=[]
     print ("\nNumber blocks using pmid or doi or md:{}".format(len(p)))
@@ -1050,10 +1220,54 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
             cite(theseids)
             replacedict[b] = mdout(theseids, notfound, outputstyle, flc=flc)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(citedhere['ids'], citedhere['notfound']) # ids added to bib
-            pm = remove_duplicates_preserve_order(pm+citedhere['pmids'])
-            cite(citedhere['ids'])
-            replacedict[b] = pmidout(pm, notpm)
+            # For PMID output style, use PMID > DOI > ID priority
+            # DEBUG: Check for specific problematic string
+            debug_this = '24717637' in b or '24717637' in str(citedhere)
+            if debug_this:
+                print(f"\n=== DEBUG for [PMID:24717637] ===")
+                print(f"Input block: {b}")
+                print(f"citedhere: {citedhere}")
+            
+            # First, convert any PMIDs in the citation to IDs and add them to cited_bibdat
+            theseids_from_pmids, missing_pmids = pmid2id(citedhere['pmids'], [])
+            if debug_this:
+                print(f"theseids_from_pmids: {theseids_from_pmids}")
+                print(f"missing_pmids: {missing_pmids}")
+            
+            all_ids = remove_duplicates_preserve_order(theseids_from_pmids + citedhere['ids'])
+            if debug_this:
+                print(f"all_ids: {all_ids}")
+            
+            cite(all_ids)
+            # Now get the best identifier (PMID > DOI > ID) for each ID
+            # Filter out items from notfound that are duplicate PMIDs (bare numeric strings matching existing pmids)
+            filtered_notfound = []
+            pmids_set = set(citedhere['pmids'])
+            for item in citedhere['notfound']:
+                item_str = str(item).strip()
+                # If it's a bare numeric string that matches a PMID we already have, skip it (duplicate)
+                if item_str.isdigit() and item_str in pmids_set:
+                    if debug_this:
+                        print(f"Filtering out duplicate PMID from notfound: {item_str}")
+                    continue
+                filtered_notfound.append(item)
+            
+            identifier_list, notfound = id2pmid_or_doi_or_id(all_ids, filtered_notfound)
+            if debug_this:
+                print(f"identifier_list after id2pmid_or_doi_or_id: {identifier_list}")
+                print(f"notfound: {notfound}")
+            
+            # If we had PMIDs in the input that couldn't be converted to IDs, include them directly
+            # (they're already in the best format - PMID)
+            for pmid in missing_pmids:
+                identifier_list.append((str(pmid), 'pmid'))
+            if debug_this:
+                print(f"identifier_list after adding missing_pmids: {identifier_list}")
+            
+            replacedict[b] = pmid_or_doi_or_id_out(identifier_list, notfound)
+            if debug_this:
+                print(f"Final output: {replacedict[b]}")
+                print(f"=== END DEBUG ===\n")
         else:
             continue
     for b in r:
@@ -1062,8 +1276,10 @@ def replace_blocks(thistext, outputstyle="md", use_whole=False, flc=False):
         if outputstyle == 'md' or outputstyle=='tex':
             replacedict[b] = mdout(theseids, theseothers, outputstyle, flc=flc)
         elif outputstyle=='pmid':
-            pm, notpm = id2pmid(theseids) # ids added to bib
-            replacedict[b] = pmidout(pm, notpm)
+            # For PMID output style, use PMID > DOI > ID priority
+            cite(theseids)
+            identifier_list, notfound = id2pmid_or_doi_or_id(theseids, theseothers)
+            replacedict[b] = pmid_or_doi_or_id_out(identifier_list, notfound)
         else:
             continue
     if len(replacedict)>0:
@@ -1092,65 +1308,83 @@ def find_similar_keys(this_string, thisdict):
 def search_pubmed(search_string, restrictfields=""):
     """
     Return a list of PMIDs for articles found by a search string.
-
-    Args:
-        search_string (str): The search term for querying PubMed.
-        restrictfields (str): Optional field restriction for the search (e.g., 'title').
-
-    Returns:
-        list: A list of PMIDs for matching articles.
     """
     if not search_string or not search_string.strip():
         print("Empty search string provided.")
         return []
 
     max_returns = 500
-    print(f"Searching PubMed for: {search_string}")
 
-    # Modify search string for DOI searches
-    if restrictfields.lower() == 'doi':
-        search_string = f"{search_string}[AID]"
-        restrictfields = ""  # Clear restrictfields
+    # ---- NEW: DOI normalization + query cascade ----
+    queries = []
+    rs = (restrictfields or "").lower().strip()
+    s = search_string.strip()
 
-    # Build the query parameters
-    params = {
-        'db': 'pubmed',
-        'term': search_string,
-        'retmax': max_returns,
-        'retmode': 'xml',
-        'email': 'your_email@example.com',  # Replace with your actual email
-        # 'api_key': 'your_api_key',        # Uncomment and set if you have an API key
-    }
-    # Do not include 'field' parameter if empty
-    if restrictfields:
-        params['field'] = restrictfields
+    if rs == "doi":
+        # Normalize common DOI input forms
+        s_norm = s
+        s_norm = s_norm.replace("https://doi.org/", "").replace("http://doi.org/", "")
+        s_norm = s_norm.replace("https://dx.doi.org/", "").replace("http://dx.doi.org/", "")
+        s_norm = s_norm.strip().strip(" .;,:()[]{}<>\"'")
+        s_norm = s_norm.split("?")[0].split("#")[0]
 
-    # Make the GET request to the ESearch API
-    try:
-        response = requests.get(
-            'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
-            params=params
-        )
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"PubMed search failure: {e}")
-        return []
+        # Build a small cascade of likely-success PubMed queries
+        # 1) strict DOI field
+        # 2) Article Identifier field (often works for DOI, PII, etc.)
+        # 3) quoted free-text fallback (rarely helps but cheap)
+        queries = [
+            f"{s_norm}[DOI]",
+            f"{s_norm}[AID]",
+            f"\"{s_norm}\"",
+        ]
+        restrictfields = ""  # don't use 'field' param for DOI searches
+    else:
+        queries = [s]
 
-    # Parse the XML response
-    try:
-        root = ET.fromstring(response.text)
-    except ET.ParseError as e:
-        print(f"Error parsing PubMed response: {e}")
-        return []
+    # ---- helper to run one ESearch ----
+    def _run_esearch(term):
+        params = {
+            'db': 'pubmed',
+            'term': term,
+            'retmax': max_returns,
+            'retmode': 'xml',
+            'email': 'your_email@example.com',  # Replace with yours
+            # 'api_key': 'your_api_key',
+        }
+        if restrictfields:
+            params['field'] = restrictfields
 
-    # Extract PMIDs from the response
-    idlist = root.find('IdList')
-    pmid_list = [id_elem.text for id_elem in idlist.findall('Id')] if idlist is not None else []
+        try:
+            response = requests.get(
+                'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
+                params=params,
+                timeout=30
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"PubMed search failure: {e}")
+            return []
 
-    foundcount = len(pmid_list)
-    print(f"{foundcount} records found.")
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as e:
+            print(f"Error parsing PubMed response: {e}")
+            return []
 
+        idlist = root.find('IdList')
+        return [id_elem.text for id_elem in idlist.findall('Id')] if idlist is not None else []
+
+    # ---- run cascade, return first non-empty result ----
+    for q in queries:
+        print(f"Searching PubMed for: {q}")
+        pmid_list = _run_esearch(q)
+        if pmid_list:
+            print(f"{len(pmid_list)} records found.")
     return pmid_list
+
+    print("0 records found.")
+    return []
+
 
 def p2b(pmidlist):
     ''' by Nick Loman '''
@@ -1435,6 +1669,12 @@ def main(
     elif filepath_obj.suffix == ".tex":
         if outputstyle == 'null':
             outputstyle = 'tex'
+
+    # Normalize style aliases so we don't accidentally skip header writing or citation conversion.
+    if outputstyle in ('markdown', '.qmd'):
+        outputstyle = 'md'
+    if outputstyle == 'latex':
+        outputstyle = 'tex'
     if safemode:
         if outputstyle in ('pubmed', 'pmid'):
             print("Outputstyle = pmid")
@@ -1725,7 +1965,8 @@ def main(
     outputfile_path = Path(outpath) / (filestem + citelabel + input_file_extension)
     outputfile_path.parent.mkdir(parents=True, exist_ok=True)
     with outputfile_path.open('w', encoding='utf-8') as file:
-        if outputstyle == "md" and original_header:
+        # Never drop YAML front-matter if it existed in the input.
+        if original_header:
             file.write(original_header)
         file.write(output_text + "\n\n")
         print("Outputfile:", str(outputfile_path))

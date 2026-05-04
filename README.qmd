@@ -66,38 +66,35 @@ Edit the `config.json` file to include your own paths before running. Key elemen
 
 ## fixcitations.py
 
-Switches citation formats, finds missing citations online. 
-Optionally, calls pandoc to create a fully referenced output file.
-
-The default or specified .bib file will then be searched for the relevant citations.
-Citations will be replaced with a citation in either .md or .tex format.
-
-Any citations not present in the master .bib file will be downloaded from pubmed and added to a .bib file
-
-Two new files will be written:
-
-1. a new .md or .tex file with correct citations
-2. a local .bib file containing all cited reference details.
-
-Optionally, additional files can be written:
-
-3. pandoc outputs in .docx, .pdf or .html formats
+Switch citation formats, find missing citations online, and keep local/global bib files synchronized.
 
 ### Input files
 
 Required:
 
-- a .md or .tex document with references in square [] or curly {} or round brackets which will be searched for PMIDs, DOIs, bibtex refs, and whole citations
+- a `.md`, `.qmd`, `.tex`, `.txt`, or `.csv` document with references in square `[]`, curly `{}`, or round `()` brackets. Citations can be PMIDs, DOIs, bibtex refs, or whole references.
 
 Optional:
 
 - *bib file*.
-	A bibtex file to use. If not specified, a new `cs.bib` file will be created in the same directory as your input file. You can also specify a global bib file for keeping a shared bank of references.
+	A local bibtex file to use (`-b/--bibfile`). If not specified, local bibliography selection priority is:
+    1) `-b/--bibfile`
+    2) YAML `bibliography` entries (in discovered order)
+    3) `cs.bib` in the source folder
+    4) any other `.bib` in the source folder (alphabetical)
+    5) fallback create `_bib/cs.bib`
+- *global bib file*.
+	Specify a global bibtex file (`-gb/--globalbibfile`) used as the wider citation source.
 - *yaml file*.
-	A yaml file called <filestem>.yaml. If it already exists, it will be augmented to add csl and bib files if needed.
-	YAML is taken according to the following hierarchy: in-file YAML, <filestem>.yaml, other yaml files. All will be copied into the <filestem>.yaml file.
+	You can pass `-y/--yaml` to add a specific YAML source file. YAML is discovered in this order:
+    1) in-file YAML front matter
+    2) `<filestem>.yaml`
+    3) `<filestem>.yml`
+    4) `_quarto.yml` in current folder, parent, then grandparent
+    5) explicit `-y/--yaml` path (if provided)
+    The script reads `bibliography` from these sources and writes `bibliography` / `csl` updates back to the most appropriate existing YAML target.
 - *csl file*.
-	You can specify a csl file using yaml.
+	You can specify `csl` in YAML. If no `csl` exists anywhere, `minimal.csl` is copied next to the chosen local bibliography and YAML is updated automatically.
 
 #### Extra functions
 
@@ -113,52 +110,44 @@ Any citations not found in the .bib files will be downloaded from pubmed and add
 
 ### Output files
 
-Two outputs are specified.
-
-`-o` determines the CITATION FORMAT and is used for switching between different citation formats e.g. PMID==>DOI or PMID==>BIB
-
-`-p` determines the PANDOC OUTPUT FORMAT and provides a quick workflow for generating fully formatted documents
-
-If `-p` is specified, `-o` must be md. If both `-p` and `-o` are specified and `-o` is not md, this indicates that the user's expectation is different from what's going to happen so the script exits. Fix this by only specifying one of these options.
-
-## For pdf, docx and html outputs using pandoc
-
-(Quarto does this for you, and is better, so I'd suggest using that instead.)
-You'll want to have pandoc properly installed with crossref so that you can automatically generate printable documents.
-
-pandoc
-pandoc-crossref
-
-This can be done with conda, or pip.
-`pip install pandoc-crossref`
+- Main output document with transformed citations:
+  - overwrite original by default
+  - write sidecar output when `-s/--safemode` is used (e.g. `.citemd.` / `.citetex.` / `.citepmid.` in filename)
+- Local bibliography output (`.bib`) containing merged local+newly-cited entries.
 
 ## Options
 
 | arg | long arg| action|
 |----|--------------|---------------------------|
+| *(positional)* | `filepath_positional` | input file path (equivalent to `-f`) |
+| -f | --filepath | input file path |
+| -gb | --globalbibfile | global bibtex file |
 | -b | --bibfile | bibfile |
-| -y | --yaml | specify a yaml file to use as a source for yaml; use "normal" or "fancy" to copy from sup-files/yaml|
+| -y | --yaml | specify an additional YAML file to search |
 | -o | --outputstyle | choices=md,markdown,tex,latex,pubmed,pmid; output references format |
-| -p | --pandoc_outputs | append as many pandoc formats as you want: pdf docx html txt md tex |
+| -s | --safemode | write sidecar output instead of overwriting input |
 | -l | --localbibonly | use only local bib file |
-| -d | --outputsubdir | outputdir - always a subdir of the working directory || -img | --imagedir | imagedirectoryname |
-| -i | --include | include files |
-| -r | --replace | follow find/replace instructions from yaml or json file
-| -m | --messy | disable clean up of intermediate files |
-| -mf | --move_figures | move all figures to the end and create captions section for submission to journal |
-| -pm | --pandoc_mermaid | use pandoc-mermaid-filter |
-| -lt | --latex_template | a latex template to be passed to pandoc |
-| -wt | --word_template | a word template to be passed to pandoc |
-| -ptp | --pathtopandoc | specify a particular path to pandoc if desired') # e.g. a letter forma |
-| -redact | --redact | redact between <!-- STARTREDACT --> <!-- ENDREDACT --> tags |
-| -s | --stripcomments | stripcomments in html format |
-| -v | --verbose | verbose |
-| -x | --xelatex | use xelatex in pandoc build |
 | -w | --wholereference | try to match whole references. |
-| -ch | --chaptermode | use pandoc --top-level-division=chapter |
-| -svg | --convert_svg | convert svg images to pdf - replaces any pdf files with the same name |
-| -ui | --uncomment_images | include images commented out using html syntax <!--![]()\{\} --> |
+| -i | --propagateincludes | recursively fix citations in Quarto included documents using `{{< include ... >}}` |
 | -flc | --force_lowercase_citations | force all citation references into lowercase |
+| -v | --verbose | verbose logging |
+
+### Propagate citations into Quarto includes (`-i/--propagateincludes`)
+
+If your `.qmd`/`.md` file uses Quarto include shortcodes like:
+
+`{{< include sections/methods.qmd >}}`
+
+then running `fixcitations.py` on just the top-level file will *not* automatically edit the included files. Use `-i` (or `--propagateincludes`) to recursively open each included document and run the same citation-fix pass on it.
+
+- Uses the **same chosen local bibliography** (the `cs.bib` selected for the original/top-level file, or the `-b/--bibfile` you passed).
+- Uses the **same CLI options** you passed (output style, whole-reference matching, lowercase forcing, etc).
+- Includes are resolved **relative to the file that contains the include**.
+- Cycles are handled safely (each file is processed at most once).
+
+Example:
+
+`python fixcitations.py -f manuscript.qmd -o md -i`
 
 ## hackmd.py
 

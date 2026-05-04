@@ -16,6 +16,7 @@ import datetime
 import re
 import requests
 import select
+import shlex
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -587,6 +588,17 @@ def update_yaml_key_preserving_format(yaml_content, key, value):
         result_lines.append('---')
     
     return '\n'.join(result_lines) + '\n'
+
+def relative_or_absolute_path(target_path, base_dir):
+    """
+    Return target_path relative to base_dir when possible; otherwise absolute.
+    """
+    target_resolved = Path(target_path).resolve()
+    base_resolved = Path(base_dir).resolve()
+    try:
+        return str(target_resolved.relative_to(base_resolved))
+    except ValueError:
+        return str(target_resolved)
 
 def flatten(thislist):
     listcount = [1 for x in thislist if type(x)==type([])]
@@ -1562,6 +1574,120 @@ def build_url_bib_entry(url):
     }
     return entry
 
+def _parse_quarto_include_target(arg_string):
+    """
+    Parse the argument string after a Quarto include shortcode, e.g.:
+
+      {{< include path/to/file.qmd >}}
+      {{< include "path/to/file.qmd" >}}
+      {{< include file="path/to/file.qmd" >}}
+
+    Returns a string path or None.
+    """
+    if not arg_string:
+        return None
+    try:
+        tokens = shlex.split(arg_string, posix=True)
+    except ValueError:
+        # Fall back to a naive split if quotes are unbalanced
+        tokens = [t for t in arg_string.strip().split() if t]
+    if not tokens:
+        return None
+
+    # Prefer explicit key=value if present
+    kv = {}
+    for t in tokens:
+        if "=" in t:
+            k, v = t.split("=", 1)
+            kv[k.strip().lower()] = v.strip().strip('"').strip("'")
+
+    for k in ("file", "src", "path", "href"):
+        if k in kv and kv[k]:
+            return kv[k]
+
+    # Otherwise, first positional token is the filename
+    first = tokens[0].strip().strip('"').strip("'")
+    return first if first else None
+
+def find_quarto_included_files(text):
+    """
+    Return a list of include targets (as they appear in the file) for Quarto include shortcodes:
+
+      {{< include ... >}}
+
+    This only discovers shortcode includes (not YAML 'include:' blocks).
+    """
+    if not text:
+        return []
+    # Capture everything between "include" and the closing ">}}"
+    pattern = re.compile(r"\{\{<\s*include\s+(.+?)\s*>\}\}")
+    out = []
+    for m in pattern.finditer(text):
+        target = _parse_quarto_include_target(m.group(1))
+        if target:
+            out.append(target)
+    return out
+
+def resolve_included_paths(parent_file, include_targets):
+    """
+    Resolve include targets relative to the including file's directory.
+    Returns a list of resolved Path objects (may include non-existent paths).
+    """
+    parent = Path(parent_file).expanduser().resolve()
+    base = parent.parent
+    resolved = []
+    for t in include_targets or []:
+        t = str(t).strip()
+        if not t:
+            continue
+        # Skip URLs
+        if re.match(r"^[a-zA-Z]+://", t):
+            continue
+        p = Path(t.strip('"').strip("'")).expanduser()
+        if not p.is_absolute():
+            p = (base / p)
+        resolved.append(p.resolve())
+    return resolved
+
+def collect_included_documents_recursively(root_file, allowed_suffixes=None, verbose=False):
+    """
+    Starting from root_file, recursively follow Quarto include shortcodes and return a list
+    of included document Paths (excluding the root itself), deduplicated and cycle-safe.
+    """
+    if allowed_suffixes is None:
+        allowed_suffixes = {".md", ".qmd", ".tex", ".txt"}
+
+    root = Path(root_file).expanduser().resolve()
+    visited = set([root])
+    discovered = []
+    stack = [root]
+
+    while stack:
+        current = stack.pop()
+        try:
+            text = current.read_text(encoding="utf-8")
+        except Exception as e:
+            if verbose:
+                print(f"Warning: unable to read include source {current}: {e}")
+            continue
+        targets = find_quarto_included_files(text)
+        for p in resolve_included_paths(current, targets):
+            if p in visited:
+                continue
+            visited.add(p)
+            # Only process documents we can handle
+            if p.suffix and p.suffix.lower() not in allowed_suffixes:
+                if verbose:
+                    print(f"Skipping included file (unsupported extension): {p}")
+                continue
+            if not p.exists():
+                print(f"Warning: included file not found: {p}")
+                continue
+            discovered.append(p)
+            stack.append(p)
+
+    return discovered
+
 def main(
     filepath,
     globalbibfile,
@@ -1801,6 +1927,65 @@ def main(
         elif "default" in chosen_reason or "fallback" in chosen_reason:
             bib_source = 'default'
 
+    # Ensure YAML contains bibliography: <path> for the chosen local bibliography.
+    chosen_bib_resolved = str(Path(chosen_bib).resolve())
+    yaml_file_for_bib = bib_to_yaml_file.get(chosen_bib_resolved)
+
+    if bib_source == 'yaml' and yaml_file_for_bib is not None:
+        # Update the YAML file that specified this bibliography path.
+        yaml_file_path = None
+        original_yaml_content = None
+        for ypath, yml_content, orig_content, order in yaml_files_checked:
+            if ypath == yaml_file_for_bib:
+                yaml_file_path = Path(ypath)
+                original_yaml_content = orig_content
+                break
+        if yaml_file_path and original_yaml_content:
+            bib_rel_path = relative_or_absolute_path(chosen_bib_resolved, yaml_file_path.parent)
+            updated_content = update_yaml_key_preserving_format(original_yaml_content, 'bibliography', bib_rel_path)
+            yaml_file_path.write_text(updated_content, encoding="utf-8")
+            print(f"Added bibliography entry to {yaml_file_path}: {bib_rel_path}")
+
+    elif bib_source == 'yaml' and yaml_file_for_bib is None:
+        # Inline YAML front matter.
+        bib_rel_path = relative_or_absolute_path(chosen_bib_resolved, sourcepath)
+        if infileyaml is None:
+            infileyaml = {}
+        infileyaml['bibliography'] = bib_rel_path
+        original_header = update_yaml_key_preserving_format(original_header, 'bibliography', bib_rel_path)
+        print(f"Added bibliography entry to inline YAML: {bib_rel_path}")
+
+    else:
+        # Command-line/default/fallback source: use an existing YAML in source folder or create <stem>.yaml.
+        if original_header:
+            # Prefer updating inline YAML in the input document if present.
+            bib_rel_path = relative_or_absolute_path(chosen_bib_resolved, sourcepath)
+            if infileyaml is None:
+                infileyaml = {}
+            infileyaml['bibliography'] = bib_rel_path
+            original_header = update_yaml_key_preserving_format(original_header, 'bibliography', bib_rel_path)
+            print(f"Added bibliography entry to inline YAML: {bib_rel_path}")
+        else:
+            yaml_file_to_update = None
+            original_yaml_content = None
+            for ypath, yml_content, orig_content, order in yaml_files_checked:
+                if ypath and Path(ypath).parent.resolve() == sourcepath.resolve():
+                    yaml_file_to_update = Path(ypath)
+                    original_yaml_content = orig_content
+                    break
+
+            if yaml_file_to_update is None:
+                yaml_file_to_update = sourcepath / (filestem + ".yaml")
+                if yaml_file_to_update.exists():
+                    original_yaml_content = yaml_file_to_update.read_text(encoding="utf-8")
+                else:
+                    original_yaml_content = ""
+
+            bib_rel_path = relative_or_absolute_path(chosen_bib_resolved, yaml_file_to_update.parent)
+            updated_content = update_yaml_key_preserving_format(original_yaml_content, 'bibliography', bib_rel_path)
+            yaml_file_to_update.write_text(updated_content, encoding="utf-8")
+            print(f"Added bibliography entry to {yaml_file_to_update}: {bib_rel_path}")
+
     # CSL handling: check if CSL exists in any YAML, create if needed
     has_csl = False
     for yaml_path, yaml_content, original_content, order in yaml_files_checked:
@@ -1869,36 +2054,48 @@ def main(
             else:
                 # For command_line, default, or fallback: create/update a YAML file
                 # Try to find the first available YAML file, or create one
-                yaml_file_to_update = None
-                original_yaml_content = None
-                
-                # First, try to find an existing YAML file in sourcepath
-                for ypath, yml_content, orig_content, order in yaml_files_checked:
-                    if ypath and Path(ypath).parent.resolve() == sourcepath.resolve():
-                        yaml_file_to_update = Path(ypath)
-                        original_yaml_content = orig_content
-                        break
-                
-                # If no YAML file found, create one based on filestem
-                if yaml_file_to_update is None:
-                    yaml_file_to_update = sourcepath / (filestem + ".yaml")
-                    original_yaml_content = ""
-                
-                # Calculate relative path from YAML file's directory to target_csl
-                yaml_dir = yaml_file_to_update.parent.resolve()
-                try:
-                    csl_rel_path = str(target_csl.relative_to(yaml_dir))
-                except ValueError:
-                    csl_rel_path = str(target_csl.resolve())
-                
-                # Update or create YAML file
-                if original_yaml_content:
-                    updated_content = update_yaml_key_preserving_format(original_yaml_content, 'csl', csl_rel_path)
+                if original_header:
+                    # Prefer updating inline YAML in the input document if present.
+                    csl_rel_path = relative_or_absolute_path(target_csl, sourcepath)
+                    if infileyaml is None:
+                        infileyaml = {}
+                    infileyaml['csl'] = csl_rel_path
+                    original_header = update_yaml_key_preserving_format(original_header, 'csl', csl_rel_path)
+                    print(f"Added CSL entry to inline YAML: {csl_rel_path}")
                 else:
-                    # Create new YAML file
-                    updated_content = f"---\ncsl: {csl_rel_path}\n---\n"
-                yaml_file_to_update.write_text(updated_content, encoding="utf-8")
-                print(f"Added CSL entry to {yaml_file_to_update}: {csl_rel_path}")
+                    yaml_file_to_update = None
+                    original_yaml_content = None
+                    
+                    # First, try to find an existing YAML file in sourcepath
+                    for ypath, yml_content, orig_content, order in yaml_files_checked:
+                        if ypath and Path(ypath).parent.resolve() == sourcepath.resolve():
+                            yaml_file_to_update = Path(ypath)
+                            original_yaml_content = orig_content
+                            break
+                    
+                    # If no YAML file found, create one based on filestem
+                    if yaml_file_to_update is None:
+                        yaml_file_to_update = sourcepath / (filestem + ".yaml")
+                        if yaml_file_to_update.exists():
+                            original_yaml_content = yaml_file_to_update.read_text(encoding="utf-8")
+                        else:
+                            original_yaml_content = ""
+                    
+                    # Calculate relative path from YAML file's directory to target_csl
+                    yaml_dir = yaml_file_to_update.parent.resolve()
+                    try:
+                        csl_rel_path = str(target_csl.relative_to(yaml_dir))
+                    except ValueError:
+                        csl_rel_path = str(target_csl.resolve())
+                    
+                    # Update or create YAML file
+                    if original_yaml_content:
+                        updated_content = update_yaml_key_preserving_format(original_yaml_content, 'csl', csl_rel_path)
+                    else:
+                        # Create new YAML file
+                        updated_content = f"---\ncsl: {csl_rel_path}\n---\n"
+                    yaml_file_to_update.write_text(updated_content, encoding="utf-8")
+                    print(f"Added CSL entry to {yaml_file_to_update}: {csl_rel_path}")
         else:
             print(f"Warning: Source CSL file not found: {source_csl}")
 
@@ -1971,11 +2168,85 @@ def main(
         file.write(output_text + "\n\n")
         print("Outputfile:", str(outputfile_path))
 
+    # Return key info for wrapper workflows (e.g., include propagation)
+    return {
+        "chosen_bib": chosen_bib,
+        "filepath": str(filepath_obj.resolve()),
+        "outputfile": str(outputfile_path.resolve()),
+        "outputstyle": outputstyle,
+    }
+
+def run_with_optional_propagateincludes(
+    filepath,
+    globalbibfile,
+    yaml_file,
+    wholereference,
+    outputstyle,
+    safemode,
+    localbibonly,
+    force_lowercase_citations,
+    verbose,
+    localbibfile,
+    propagateincludes=False,
+):
+    """
+    Wrapper around main() that optionally finds Quarto includes and processes them recursively
+    using the same chosen local bibliography and the same CLI arguments.
+    """
+    result = main(
+        filepath=filepath,
+        globalbibfile=globalbibfile,
+        yaml_file=yaml_file,
+        wholereference=wholereference,
+        outputstyle=outputstyle,
+        safemode=safemode,
+        localbibonly=localbibonly,
+        force_lowercase_citations=force_lowercase_citations,
+        verbose=verbose,
+        localbibfile=localbibfile,
+    )
+
+    if not propagateincludes:
+        return result
+
+    chosen_bib = result.get("chosen_bib") if isinstance(result, dict) else None
+    if not chosen_bib:
+        print("Warning: could not determine chosen bibliography for propagation; skipping include propagation.")
+        return result
+
+    included_docs = collect_included_documents_recursively(filepath, verbose=verbose)
+    if included_docs:
+        print(f"\nPropagating citation fixes into {len(included_docs)} included document(s) using bibliography: {chosen_bib}")
+    else:
+        if verbose:
+            print("\nNo Quarto includes found to propagate.")
+        return result
+
+    for inc in included_docs:
+        try:
+            main(
+                filepath=str(inc),
+                globalbibfile=globalbibfile,
+                yaml_file=yaml_file,
+                wholereference=wholereference,
+                outputstyle=outputstyle,
+                safemode=safemode,
+                localbibonly=localbibonly,
+                force_lowercase_citations=force_lowercase_citations,
+                verbose=verbose,
+                localbibfile=chosen_bib,  # force same bib for all includes
+            )
+        except Exception as e:
+            print(f"Warning: failed to process included file {inc}: {e}")
+
+    return result
+
 if __name__ == "__main__":
     config = getconfig()
     parser = argparse.ArgumentParser()
     # Essential arguments
     parser.add_argument("-f", '--filepath', help='Path to the input file', default="../genomicc-manuscript/manuscript.tex")
+    parser.add_argument('filepath_positional', nargs='?', help='Path to the input file (equivalent to -f/--filepath)')
     # Additional files to specify
     parser.add_argument('-gb', '--globalbibfile', default=str(default_global_bibfile), help='BibTeX file')
     parser.add_argument('-y', '--yaml', default=None, help='YAML file to use (looked up in file folder if relative)')
@@ -1986,14 +2257,16 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--safemode', action="store_true", default=False, help='Overwrite input file with new version')
     parser.add_argument('-l', '--localbibonly', action="store_true", default=False, help='Use only local BibTeX file')
     parser.add_argument('-flc', '--force_lowercase_citations', action="store_true", default=False, help='Force all citation references into lowercase')
+    parser.add_argument('-i', '--propagateincludes', action="store_true", default=False, help='Recursively fix citations in Quarto-included documents ({{< include ... >}}) using the same chosen cs.bib and CLI options')
     parser.add_argument('-v', '--verbose', action="store_true", default=False, help='Verbose output')
     args = parser.parse_args()
+    filepath_arg = args.filepath_positional if args.filepath_positional else args.filepath
 
     global verbose
     verbose = args.verbose
-    # Call the main function with parsed arguments
-    main(
-        filepath=str(Path(args.filepath).expanduser().resolve()),
+    # Call the main function (optionally propagating Quarto includes)
+    run_with_optional_propagateincludes(
+        filepath=str(Path(filepath_arg).expanduser().resolve()),
         globalbibfile=str(args.globalbibfile) if isinstance(args.globalbibfile, Path) else args.globalbibfile,
         yaml_file=args.yaml,
         wholereference=args.wholereference,
@@ -2002,7 +2275,8 @@ if __name__ == "__main__":
         localbibonly=args.localbibonly,
         force_lowercase_citations=args.force_lowercase_citations,
         verbose=verbose,
-        localbibfile=args.bibfile
+        localbibfile=args.bibfile,
+        propagateincludes=args.propagateincludes,
     )
 
 
